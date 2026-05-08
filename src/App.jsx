@@ -1,24 +1,17 @@
 import { useState, useEffect } from "react";
 
 // =====================
-// Gemini API
+// Gemini API（サーバー経由・APIキーは公開しない）
 // =====================
 async function callAI(systemPrompt, userMessage) {
-  const key = import.meta.env.VITE_GEMINI_API_KEY;
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ parts: [{ text: userMessage }] }],
-      }),
-    }
-  );
+  const res = await fetch("/api/ai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ systemPrompt, userMessage }),
+  });
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.candidates[0].content.parts[0].text;
+  if (data.error) throw new Error(data.error);
+  return data.text;
 }
 
 // =====================
