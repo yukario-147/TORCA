@@ -9,4 +9,6 @@ html, body, #root {
   height: 100%;
   background: #0c0c12;
   overflow: hidden;
+  font-family: 'DM Sans', 'Noto Sans JP', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }

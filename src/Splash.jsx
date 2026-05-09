@@ -4,7 +4,7 @@ export default function Splash({ onFinish }) {
   const [phase, setPhase] = useState('visible');
 
   useEffect(() => {
-    const MIN_DISPLAY = 1500;
+    const MIN_DISPLAY = 2800;
     const start = Date.now();
     const finish = () => {
       const remaining = Math.max(0, MIN_DISPLAY - (Date.now() - start));

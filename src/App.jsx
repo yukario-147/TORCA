@@ -1105,6 +1105,8 @@ export default function App() {
     el.style.setProperty("--border-accent", "rgba(232,64,160,0.35)");
     document.body.style.cssText = [
       "height:100%;margin:0;padding:0;overflow:hidden;background:#0c0c12;",
+      "font-family:'DM Sans','Noto Sans JP',-apple-system,BlinkMacSystemFont,sans-serif;",
+      "-webkit-font-smoothing:antialiased;",
       "background-image:radial-gradient(circle,rgba(255,255,255,0.03) 1px,transparent 1px);",
       "background-size:32px 32px;",
     ].join("");
@@ -1264,10 +1266,11 @@ export default function App() {
           {/* ボディ */}
           <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "14px 12px" : "18px 20px" }}>
             {renderBody()}
+            {isMobile && <Footer onNav={navigateTo} />}
           </div>
 
-          {/* フッター */}
-          <Footer onNav={navigateTo} />
+          {/* フッター（PC のみ常時表示） */}
+          {!isMobile && <Footer onNav={navigateTo} />}
 
           {/* モバイル下部ナビ */}
           {isMobile && (
