@@ -27,10 +27,10 @@ const KYURUSHITE = {
   description: "ディアステージ所属の4人組アイドルグループ。「カワイイ・リアリズム」をコンセプトに活動。",
   searchTerms: ["きゅるして", "きゅるりんってしてみて"],
   members: [
-    { id: "uta",  name: "島村嬉唄",   kana: "しまむらうた",   color: "#FFD700", emoji: "💛", catchphrase: "うたちゃん" },
-    { id: "yane", name: "環やね",     kana: "たまきやね",     color: "#9B59B6", emoji: "💜", catchphrase: "やねっち" },
-    { id: "yuna", name: "チバゆな",   kana: "ちばゆな",       color: "#FF69B4", emoji: "🩷", catchphrase: "チバちゃん" },
-    { id: "amu",  name: "逃げ水あむ", kana: "にげみずあむ",   color: "#E74C3C", emoji: "❤️", catchphrase: "あむあむ" },
+    { id: "uta",  name: "島村嬉唄",   kana: "しまむらうた",   color: "#FFD700", colorRgb: "255,215,0",   emoji: "💛", catchphrase: "最恐かわいい、歌姫べびちゃん", nickname: "うたちゃん / うちゃたん" },
+    { id: "yane", name: "環やね",     kana: "たまきやね",     color: "#9B59B6", colorRgb: "155,89,182",  emoji: "💜", catchphrase: "安心安全女神リーダー",         nickname: "やねちゃん / やねぴ" },
+    { id: "yuna", name: "チバゆな",   kana: "ちばゆな",       color: "#FF69B4", colorRgb: "255,105,180", emoji: "🩷", catchphrase: "みんなの元カノ",              nickname: "ゆなちゃん" },
+    { id: "amu",  name: "逃げ水あむ", kana: "にげみずあむ",   color: "#E74C3C", colorRgb: "231,76,60",   emoji: "❤️", catchphrase: "赤い喜ばせ屋",               nickname: "あむちゃん / あむち" },
   ],
 };
 
@@ -88,8 +88,17 @@ const SOURCES = ["すべて", "X", "TikTok"];
 const fmt = (n) => n >= 10000 ? (n / 10000).toFixed(1) + "万" : n.toLocaleString();
 
 const DEFAULT_ACCENT = "#FF69B4";
+const DEFAULT_ACCENT_RGB = "255,105,180";
+const ACCENT_RGB_MAP = {
+  "#FFD700": "255,215,0",
+  "#9B59B6": "155,89,182",
+  "#FF69B4": "255,105,180",
+  "#E74C3C": "231,76,60",
+};
 function applyAccent(color) {
-  document.documentElement.style.setProperty("--accent", color);
+  const el = document.documentElement;
+  el.style.setProperty("--accent", color);
+  el.style.setProperty("--accent-rgb", ACCENT_RGB_MAP[color] || DEFAULT_ACCENT_RGB);
 }
 
 function useBreakpoint() {
@@ -141,17 +150,27 @@ function Badge({ children, variant = "default" }) {
 // =====================
 function Footer({ onNav }) {
   return (
-    <div style={{ background: D.surface, borderTop: `1px solid ${D.border}`, padding: "12px 20px", flexShrink: 0 }}>
-      <div style={{ display: "flex", justifyContent: "center", gap: 14, flexWrap: "wrap", marginBottom: 6 }}>
-        {[["利用規約","terms"],["プライバシーポリシー","privacy"],["運営者情報","about"],["削除申請","takedown"]].map(([label, t]) => (
-          <button key={t} onClick={() => onNav(t)}
-            style={{ background: "none", border: "none", color: D.textSub, fontSize: 11, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <div style={{ textAlign: "center", fontSize: 10, color: D.textMuted, lineHeight: 1.8 }}>
-        TORCAは非公式のファンサイトです<br />© 2025 TORCA
+    <div style={{ background: D.surface, flexShrink: 0 }}>
+      {/* グラデーションライン */}
+      <div style={{ height: 2, background: "linear-gradient(90deg,#FFD700,#9B59B6,#FF69B4,#E74C3C)", opacity: 0.6 }} />
+      <div style={{ padding: "12px 20px" }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 14, flexWrap: "wrap", marginBottom: 6 }}>
+          {[["利用規約","terms"],["プライバシーポリシー","privacy"],["運営者情報","about"],["削除申請","takedown"]].map(([label, t]) => (
+            <button key={t} onClick={() => onNav(t)}
+              style={{ background: "none", border: "none", color: D.textSub, fontSize: 11, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div style={{ textAlign: "center", marginBottom: 4 }}>
+          <a href="https://www.kyurushite.com/" target="_blank" rel="noopener noreferrer"
+            style={{ fontSize: 10, color: D.accentLight, textDecoration: "none" }}>
+            きゅるりんってしてみて 公式サイト ↗
+          </a>
+        </div>
+        <div style={{ textAlign: "center", fontSize: 10, color: D.textMuted, lineHeight: 1.8 }}>
+          TORCAは非公式のファンサービスです。著作権はきゅるりんってしてみて・ディアステージに帰属します。<br />© 2025 TORCA
+        </div>
       </div>
     </div>
   );
@@ -170,10 +189,10 @@ function VideoCard({ v, onSelect, onSave, isSaved, showFocus = true }) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        background: hover ? D.surfaceHover : D.surface,
-        border: `1px solid ${hover ? D.borderHover : D.border}`,
+        background: hover ? "#1a1a28" : "#14141e",
+        border: `1px solid ${hover ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.08)"}`,
         borderRadius: 14, overflow: "hidden", cursor: "pointer",
-        transition: "all 0.18s", transform: hover ? "translateY(-2px)" : "none",
+        transition: "all 0.25s ease", transform: hover ? "translateY(-2px)" : "none",
       }}
     >
       <div style={{ height: 90, background: `linear-gradient(135deg,${(focusMember?.color || artist.color)}25,${(focusMember?.color || artist.color)}06)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, position: "relative", borderBottom: `1px solid ${D.border}` }}>
@@ -268,16 +287,34 @@ function Onboarding({ onComplete }) {
             <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 6 }}>推しメンバーは？</div>
             <div style={{ fontSize: 12, color: D.textSub, marginBottom: 20 }}>選ぶとあなた専用の推しカメラが表示されます。</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {KYURUSHITE.members.map(m => (
-                <button key={m.id} onClick={() => setMemberId(m.id)}
-                  style={{ background: memberId === m.id ? `${m.color}25` : D.surface, border: `1.5px solid ${memberId === m.id ? m.color : D.border}`, borderRadius: 14, padding: 14, textAlign: "center", cursor: "pointer" }}>
-                  <div style={{ fontSize: 36, marginBottom: 8 }}>{m.emoji}</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: D.text }}>{m.name}</div>
-                  <div style={{ fontSize: 10, color: m.color, marginTop: 2, fontWeight: 700 }}>{m.catchphrase}</div>
-                </button>
-              ))}
+              {KYURUSHITE.members.map(m => {
+                const selected = memberId === m.id;
+                return (
+                  <button key={m.id} onClick={() => setMemberId(m.id)}
+                    style={{
+                      background: selected ? `rgba(${m.colorRgb},0.18)` : "#14141e",
+                      border: `1.5px solid rgba(${m.colorRgb},${selected ? 0.8 : 0.3})`,
+                      borderRadius: 14, padding: 14, textAlign: "center", cursor: "pointer",
+                      boxShadow: selected ? `0 0 30px rgba(${m.colorRgb},0.5)` : `0 0 0px rgba(${m.colorRgb},0)`,
+                      transition: "all 0.3s ease",
+                    }}>
+                    <div style={{ fontSize: 36, marginBottom: 6 }}>{m.emoji}</div>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: D.text }}>{m.name}</div>
+                    <div style={{ fontSize: 10, color: m.color, marginTop: 3, fontWeight: 600 }}>{m.nickname}</div>
+                    <div style={{ fontSize: 9, color: D.textMuted, marginTop: 2, lineHeight: 1.4 }}>{m.catchphrase}</div>
+                  </button>
+                );
+              })}
               <button onClick={() => setMemberId(null)}
-                style={{ gridColumn: "span 2", background: memberId === null ? "rgba(255,105,180,0.15)" : D.surface, border: `1.5px solid ${memberId === null ? "#FF69B4" : D.border}`, borderRadius: 14, padding: 12, cursor: "pointer", color: memberId === null ? "#FF69B4" : D.textSub, fontSize: 13, fontWeight: memberId === null ? 700 : 400 }}>
+                style={{
+                  gridColumn: "span 2",
+                  background: memberId === null ? "rgba(255,105,180,0.15)" : "#14141e",
+                  border: `1.5px solid ${memberId === null ? "#FF69B4" : "rgba(255,255,255,0.08)"}`,
+                  borderRadius: 14, padding: 12, cursor: "pointer",
+                  color: memberId === null ? "#FF69B4" : D.textSub,
+                  fontSize: 13, fontWeight: memberId === null ? 700 : 400,
+                  transition: "all 0.3s ease",
+                }}>
                 💗 全員推し（きゅるして全体）
               </button>
             </div>
@@ -325,10 +362,18 @@ function ArtistPage({ artist, videos, onSelectVideo, onSelectMember, onSave, sav
               const cnt = videos.filter(v => v.artistId === artist.id && v.focusMemberId === m.id).length;
               return (
                 <button key={m.id} onClick={() => onSelectMember(m.id)}
-                  style={{ background: `${m.color}15`, border: `1.5px solid ${m.color}30`, borderRadius: 14, padding: 14, cursor: "pointer", textAlign: "center" }}>
+                  style={{
+                    background: `rgba(${m.colorRgb},0.1)`,
+                    border: `1.5px solid rgba(${m.colorRgb},0.3)`,
+                    borderRadius: 14, padding: 14, cursor: "pointer", textAlign: "center",
+                    transition: "all 0.25s ease",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow = `0 0 20px rgba(${m.colorRgb},0.3)`}
+                  onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
                   <div style={{ fontSize: 32, marginBottom: 6 }}>{m.emoji}</div>
                   <div style={{ fontSize: 12, fontWeight: 800, color: D.text }}>{m.name}</div>
-                  <div style={{ fontSize: 9, color: m.color, marginTop: 2, fontWeight: 700 }}>{cnt}件 ↗</div>
+                  <div style={{ fontSize: 9, color: m.color, marginTop: 2, fontWeight: 600 }}>{m.nickname}</div>
+                  <div style={{ fontSize: 9, color: m.color, marginTop: 1, fontWeight: 700 }}>{cnt}件 ↗</div>
                 </button>
               );
             })}
@@ -354,8 +399,9 @@ function MemberPage({ artist, member, videos, onSelectVideo, onSave, saved, onBa
       <div style={{ background: `linear-gradient(135deg,${member.color}30,${member.color}08)`, border: `1px solid ${member.color}40`, borderRadius: 18, padding: "22px 20px", marginBottom: 18, textAlign: "center" }}>
         <div style={{ fontSize: 60, marginBottom: 8 }}>{member.emoji}</div>
         <div style={{ fontSize: 22, fontWeight: 900, color: D.text }}>{member.name}</div>
-        <div style={{ fontSize: 11, color: member.color, fontWeight: 700, marginTop: 4, letterSpacing: "0.05em" }}>「{member.catchphrase}」</div>
-        <div style={{ fontSize: 10, color: D.textMuted, marginTop: 6 }}>{artist.name}</div>
+        <div style={{ fontSize: 10, color: member.color, fontWeight: 600, marginTop: 3 }}>{member.nickname}</div>
+        <div style={{ fontSize: 10, color: D.textSub, fontStyle: "italic", marginTop: 4, lineHeight: 1.5 }}>「{member.catchphrase}」</div>
+        <div style={{ fontSize: 9, color: D.textMuted, marginTop: 4 }}>{artist.name}</div>
         <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14 }}>
           <a href={xUrl(member.name + " 推しカメラ")} target="_blank" rel="noopener noreferrer"
             style={{ background: "rgba(0,0,0,0.4)", border: `1px solid ${D.border}`, borderRadius: 10, padding: "8px 14px", color: D.text, fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
@@ -787,30 +833,53 @@ function HomeTab({ videos, profile, onSelectVideo, onSelectArtist, onSave, saved
   return (
     <div style={{ height: "100%", overflowY: "auto" }}>
       {/* きゅるして情報セクション */}
-      <div style={{ background: "linear-gradient(135deg,rgba(255,105,180,0.15),rgba(255,105,180,0.03))", border: "1px solid rgba(255,105,180,0.25)", borderRadius: 18, padding: "16px 14px", marginBottom: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: D.text }}>きゅるりんってしてみて</div>
-            <div style={{ fontSize: 10, color: "#FF69B4", fontWeight: 700, marginTop: 2 }}>💗 撮可アーカイブ</div>
-          </div>
-          <div style={{ display: "flex", gap: 6 }}>
-            <a href="https://x.com/kyururin_sh" target="_blank" rel="noopener noreferrer"
-              style={{ background: "rgba(0,0,0,0.4)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "6px 10px", color: D.text, fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-              𝕏
-            </a>
-            <a href="https://www.tiktok.com/@kyururin_sh" target="_blank" rel="noopener noreferrer"
-              style={{ background: "rgba(255,0,80,0.1)", border: "1px solid rgba(255,0,80,0.2)", borderRadius: 8, padding: "6px 10px", color: "#ff6080", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
-              🎵
-            </a>
-          </div>
+      <div style={{ background: "linear-gradient(135deg,rgba(255,105,180,0.12),rgba(255,105,180,0.02))", border: "1px solid rgba(255,105,180,0.2)", borderRadius: 18, padding: "14px 14px 16px", marginBottom: 16 }}>
+        {/* タイトル */}
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: D.text }}>きゅるりんってしてみて</div>
+          <div style={{ fontSize: 10, color: "#FF69B4", fontWeight: 700, marginTop: 2 }}>💗 撮可アーカイブ</div>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 }}>
+
+        {/* 最新情報バナー */}
+        {[
+          { icon: "🎉", text: "Kアリーナ横浜ワンマン開催決定！" },
+          { icon: "💿", text: "5thミニアルバム 2026年夏リリース決定！" },
+        ].map(({ icon, text }) => (
+          <div key={text} style={{
+            background: "linear-gradient(135deg,rgba(var(--accent-rgb),0.15),rgba(var(--accent-rgb),0.05))",
+            borderLeft: "3px solid var(--accent)",
+            borderRadius: "0 10px 10px 0",
+            padding: "8px 12px", marginBottom: 6,
+            fontSize: 11, fontWeight: 700, color: D.text,
+          }}>
+            {icon} {text}
+          </div>
+        ))}
+
+        {/* メンバーアイコン */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6, marginBottom: 12, marginTop: 12 }}>
           {KYURUSHITE.members.map(m => (
             <button key={m.id} onClick={() => onGoToMember(m.id)}
-              style={{ background: `${m.color}18`, border: `1.5px solid ${m.color}35`, borderRadius: 12, padding: "10px 4px", cursor: "pointer", textAlign: "center" }}>
+              style={{ background: `rgba(${m.colorRgb},0.1)`, border: `1.5px solid rgba(${m.colorRgb},0.3)`, borderRadius: 12, padding: "10px 4px", cursor: "pointer", textAlign: "center", transition: "all 0.25s ease" }}>
               <div style={{ width: 30, height: 30, borderRadius: "50%", background: m.color, margin: "0 auto 5px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>{m.emoji}</div>
-              <div style={{ fontSize: 9, fontWeight: 800, color: D.text, lineHeight: 1.3, overflow: "hidden" }}>{m.name.split("")[0] === "島" ? "嬉唄" : m.name.split("")[0] === "逃" ? "あむ" : m.name.split("")[0] === "環" ? "やね" : "ゆな"}</div>
+              <div style={{ fontSize: 9, fontWeight: 800, color: D.text, lineHeight: 1.3 }}>{m.nickname.split(" /")[0]}</div>
             </button>
+          ))}
+        </div>
+
+        {/* SNS導線 */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[
+            { label: "𝕏 公式", href: "https://x.com/KYURUSHITE" },
+            { label: "🎵 TikTok", href: "https://www.tiktok.com/@kyurushite" },
+            { label: "📸 Instagram", href: "https://www.instagram.com/kyurushite/" },
+            { label: "▶ YouTube", href: "https://www.youtube.com/channel/UC38ULbpGgiA7t6i-lbLu9VQ" },
+            { label: "💗 FC", href: "https://kyurushite.bitfan.id/" },
+          ].map(({ label, href }) => (
+            <a key={href} href={href} target="_blank" rel="noopener noreferrer"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "5px 10px", color: D.text, fontSize: 10, fontWeight: 600, textDecoration: "none", transition: "all 0.25s ease" }}>
+              {label}
+            </a>
           ))}
         </div>
       </div>
@@ -938,8 +1007,11 @@ function MyTab({ profile, videos, onSelectVideo, onSelectMember, onSave, saved, 
           <div>
             <div style={{ fontSize: 9, color: D.pink, letterSpacing: "0.1em", fontWeight: 700, marginBottom: 2 }}>YOUR PUSH</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: D.text }}>{myMember?.name || "きゅるして全員"}</div>
-            <div style={{ fontSize: 10, color: D.textSub, marginTop: 2 }}>
-              {myMember ? `${myMember.catchphrase} ・ きゅるりんってしてみて` : "きゅるりんってしてみて"}
+            {myMember && (
+              <div style={{ fontSize: 10, color: myMember.color, fontWeight: 600, marginTop: 2 }}>{myMember.nickname}</div>
+            )}
+            <div style={{ fontSize: 10, color: D.textSub, marginTop: 2, fontStyle: myMember ? "italic" : "normal" }}>
+              {myMember ? `「${myMember.catchphrase}」` : "きゅるりんってしてみて"}
             </div>
           </div>
         </div>
@@ -965,13 +1037,24 @@ function MyTab({ profile, videos, onSelectVideo, onSelectMember, onSave, saved, 
 
       <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>💗 メンバーで絞り込む</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-        {KYURUSHITE.members.map(m => (
-          <button key={m.id} onClick={() => onSelectMember("kyurushite", m.id)}
-            style={{ background: m.id === myMember?.id ? `${m.color}25` : `${m.color}12`, border: `1.5px solid ${m.id === myMember?.id ? m.color : `${m.color}25`}`, borderRadius: 12, padding: 12, cursor: "pointer", textAlign: "center" }}>
-            <div style={{ fontSize: 26, marginBottom: 4 }}>{m.emoji}</div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: D.text }}>{m.name}</div>
-          </button>
-        ))}
+        {KYURUSHITE.members.map(m => {
+          const active = m.id === myMember?.id;
+          return (
+            <button key={m.id} onClick={() => onSelectMember("kyurushite", m.id)}
+              style={{
+                background: active ? `rgba(${m.colorRgb},0.18)` : `rgba(${m.colorRgb},0.08)`,
+                border: `1.5px solid rgba(${m.colorRgb},${active ? 0.8 : 0.3})`,
+                borderRadius: 12, padding: 12, cursor: "pointer", textAlign: "center",
+                boxShadow: active ? `0 0 30px rgba(${m.colorRgb},0.5)` : "none",
+                transition: "all 0.3s ease",
+              }}>
+              <div style={{ fontSize: 26, marginBottom: 4 }}>{m.emoji}</div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: D.text }}>{m.name}</div>
+              <div style={{ fontSize: 9, color: m.color, marginTop: 2, fontWeight: 600 }}>{m.nickname}</div>
+              <div style={{ fontSize: 8, color: D.textMuted, marginTop: 1 }}>{m.catchphrase}</div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1105,7 +1188,19 @@ export default function App() {
     const el = document.documentElement;
     el.style.cssText = "height:100%;margin:0;padding:0;background:#0c0c12;";
     el.style.setProperty("--accent", DEFAULT_ACCENT);
-    document.body.style.cssText = "height:100%;margin:0;padding:0;overflow:hidden;background:#0c0c12;";
+    el.style.setProperty("--accent-rgb", DEFAULT_ACCENT_RGB);
+    el.style.setProperty("--bg-primary", "#0c0c12");
+    el.style.setProperty("--bg-card", "#14141e");
+    el.style.setProperty("--bg-card-hover", "#1a1a28");
+    el.style.setProperty("--text-primary", "#ffffff");
+    el.style.setProperty("--text-secondary", "#aaaacc");
+    el.style.setProperty("--border-subtle", "rgba(255,255,255,0.08)");
+    el.style.setProperty("--glow-intensity", "0.4");
+    document.body.style.cssText = [
+      "height:100%;margin:0;padding:0;overflow:hidden;background:#0c0c12;",
+      "background-image:radial-gradient(circle,rgba(255,255,255,0.03) 1px,transparent 1px);",
+      "background-size:32px 32px;",
+    ].join("");
     const root = document.getElementById("root");
     if (root) root.style.cssText = "width:100%;height:100%;margin:0;padding:0;";
   }, []);
@@ -1211,7 +1306,8 @@ export default function App() {
           <div style={{ width: 200, flexShrink: 0, background: D.surface, borderRight: `1px solid ${D.border}`, display: "flex", flexDirection: "column", padding: "20px 12px" }}>
             <div style={{ marginBottom: 24, paddingLeft: 8 }}>
               <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: "-0.04em", background: "linear-gradient(90deg,#FF69B4,#ff8ec7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>TORCA</div>
-              <div style={{ fontSize: 9, color: D.textMuted, letterSpacing: "0.14em" }}>きゅるして撮可アーカイブ</div>
+              <div style={{ fontSize: 9, color: D.textMuted, letterSpacing: "0.1em", marginTop: 1 }}>きゅるして撮可アーカイブ</div>
+              <div style={{ fontSize: 8, color: D.textMuted, marginTop: 4, lineHeight: 1.5 }}>💛💜🩷❤️<br />きゅるしてのための撮可アーカイブ</div>
             </div>
             {mainTabs.map(t => (
               <button key={t.key} onClick={() => navigateTo(t.key)}
@@ -1229,10 +1325,11 @@ export default function App() {
         {/* メインコラム */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
           {/* ヘッダー */}
-          <div style={{ background: D.surface, borderBottom: `1px solid ${D.border}`, padding: isMobile ? "12px 14px" : "14px 20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ background: `linear-gradient(180deg, rgba(var(--accent-rgb),0.12) 0%, ${D.surface} 100%)`, borderBottom: `1px solid ${D.border}`, padding: isMobile ? "10px 14px" : "12px 20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             {isMobile && (
               <div>
                 <div style={{ fontSize: 17, fontWeight: 900, background: "linear-gradient(90deg,#FF69B4,#ff8ec7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>TORCA</div>
+                <div style={{ fontSize: 8, color: D.textMuted, lineHeight: 1.4 }}>💛💜🩷❤️ きゅるしてのための撮可アーカイブ</div>
               </div>
             )}
             {(tab !== "home" || viewArtist || viewMember) && (
