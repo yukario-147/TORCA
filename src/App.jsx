@@ -1141,7 +1141,7 @@ export default function App() {
   };
 
   if (selected) return (
-    <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", fontFamily: "'Hiragino Sans','Noto Sans JP',sans-serif" }}>
+    <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", fontFamily: "'DM Sans', 'Noto Sans JP', -apple-system, sans-serif", animation: "pageIn 0.25s cubic-bezier(0.4,0,0.2,1)" }}>
       <DetailView v={selected} onBack={() => setSelected(null)} onSave={toggleSave} isSaved={saved.includes(selected.id)} />
     </div>
   );
@@ -1208,6 +1208,8 @@ export default function App() {
     }
   };
 
+  const contentKey = `${tab}-${viewArtist || ''}-${viewMember || ''}`;
+
   return (
     <>
       {!splashDone && <Splash onFinish={() => setSplashDone(true)} />}
@@ -1259,13 +1261,15 @@ export default function App() {
                   style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>← 戻る</button>
               )}
               <button onClick={() => { localStorage.removeItem('torca_onboarding_done'); setOnboardingDone(false); }}
-                style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>?</button>
+                style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>推し設定</button>
             </div>
           </div>
 
           {/* ボディ */}
-          <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "14px 12px" : "18px 20px" }}>
-            {renderBody()}
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            <div key={contentKey} style={{ flex: "1 0 auto", padding: isMobile ? "14px 12px" : "18px 20px", animation: "pageIn 0.22s cubic-bezier(0.4,0,0.2,1)" }}>
+              {renderBody()}
+            </div>
             {isMobile && <Footer onNav={navigateTo} />}
           </div>
 

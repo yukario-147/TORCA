@@ -56,16 +56,20 @@ const DEFAULT_MEMBER = {
 export default function Onboarding({ onComplete }) {
   const [step, setStep] = useState(0); // 0=welcome, 1=member, 2=confirm
   const [selected, setSelected] = useState(null);
+  const [leaving, setLeaving] = useState(false);
 
   const confirmed = selected ?? DEFAULT_MEMBER;
 
   const handleComplete = () => {
-    onComplete?.({
-      memberId: confirmed.id,
-      memberColor: confirmed.color,
-      memberColorRgb: confirmed.colorRgb,
-      memberName: confirmed.name,
-    });
+    setLeaving(true);
+    setTimeout(() => {
+      onComplete?.({
+        memberId: confirmed.id,
+        memberColor: confirmed.color,
+        memberColorRgb: confirmed.colorRgb,
+        memberName: confirmed.name,
+      });
+    }, 450);
   };
 
   const applyTheme = (member) => {
@@ -85,7 +89,13 @@ export default function Onboarding({ onComplete }) {
   };
 
   return (
-    <div style={s.overlay}>
+    <div style={{
+      ...s.overlay,
+      opacity: leaving ? 0 : 1,
+      transform: leaving ? 'scale(1.04)' : 'scale(1)',
+      transition: leaving ? 'opacity 0.45s cubic-bezier(0.4,0,0.2,1), transform 0.45s cubic-bezier(0.4,0,0.2,1)' : 'none',
+      pointerEvents: leaving ? 'none' : 'auto',
+    }}>
       <div style={{
         ...s.glow1,
         background: confirmed.color,
