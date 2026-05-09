@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import Onboarding from './Onboarding.jsx';
+import Splash from './Splash.jsx';
 
 async function callAI(systemPrompt, userMessage) {
   const res = await fetch("/api/ai", {
@@ -233,110 +235,6 @@ function VideoCard({ v, onSelect, onSave, isSaved, showFocus = true }) {
   );
 }
 
-// =====================
-// オンボーディング（2ステップ）
-// =====================
-function Onboarding({ onComplete }) {
-  const [step, setStep] = useState(0);
-  const [memberId, setMemberId] = useState(null);
-
-  const skip = () => onComplete({ memberId: null });
-  const finish = () => onComplete({ memberId });
-
-  return (
-    <div style={{ width: "100vw", height: "100dvh", background: D.bg, color: D.text, display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'Hiragino Sans','Noto Sans JP',sans-serif" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", flexShrink: 0 }}>
-        <div style={{ display: "flex", gap: 4 }}>
-          {[0, 1].map(i => (
-            <div key={i} style={{ width: 28, height: 4, borderRadius: 2, background: i <= step ? "var(--accent)" : "rgba(255,255,255,0.1)" }} />
-          ))}
-        </div>
-        <button onClick={skip} style={{ background: "none", border: "none", color: D.textSub, fontSize: 12, cursor: "pointer" }}>スキップ</button>
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
-        {step === 0 && (
-          <div>
-            <div style={{ fontSize: 30, marginBottom: 14 }}>💗</div>
-            <div style={{ fontSize: 26, fontWeight: 900, letterSpacing: "-0.03em", lineHeight: 1.3, marginBottom: 8, background: "linear-gradient(90deg,#FF69B4,#ff8ec7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
-              TORCAへようこそ
-            </div>
-            <div style={{ fontSize: 14, color: "#ff8ec7", fontWeight: 700, marginBottom: 16 }}>
-              きゅるりんってしてみての撮可アーカイブ
-            </div>
-            <div style={{ fontSize: 13, color: D.textSub, lineHeight: 1.7, marginBottom: 20 }}>
-              ライブの「撮影可能区間（撮可）」の映像を、X・TikTokから集約して見つけやすく整理するアプリです。
-            </div>
-            <div style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10, color: D.accentLight }}>✨ できること</div>
-              <div style={{ fontSize: 12, color: D.textSub, lineHeight: 1.8 }}>
-                • メンバー別「推しカメラ」をまとめて表示<br />
-                • 会場・画質で横断検索<br />
-                • AIが撮可投稿のキーワードを自動生成<br />
-                • URLから情報を自動解析してカード化
-              </div>
-            </div>
-            <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 12, padding: "10px 14px", fontSize: 11, color: "#d4a84b", lineHeight: 1.6 }}>
-              ⚠ 動画は直接ホスティングせず、元投稿リンクを表示します。著作権は各権利者に帰属します。
-            </div>
-          </div>
-        )}
-
-        {step === 1 && (
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 900, marginBottom: 6 }}>推しメンバーは？</div>
-            <div style={{ fontSize: 12, color: D.textSub, marginBottom: 20 }}>選ぶとあなた専用の推しカメラが表示されます。</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              {KYURUSHITE.members.map(m => {
-                const selected = memberId === m.id;
-                return (
-                  <button key={m.id} onClick={() => setMemberId(m.id)}
-                    style={{
-                      background: selected ? `rgba(${m.colorRgb},0.18)` : "#14141e",
-                      border: `1.5px solid rgba(${m.colorRgb},${selected ? 0.8 : 0.3})`,
-                      borderRadius: 14, padding: 14, textAlign: "center", cursor: "pointer",
-                      boxShadow: selected ? `0 0 30px rgba(${m.colorRgb},0.5)` : `0 0 0px rgba(${m.colorRgb},0)`,
-                      transition: "all 0.3s ease",
-                    }}>
-                    <div style={{ fontSize: 36, marginBottom: 6 }}>{m.emoji}</div>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: D.text }}>{m.name}</div>
-                    <div style={{ fontSize: 10, color: m.color, marginTop: 3, fontWeight: 600 }}>{m.nickname}</div>
-                    <div style={{ fontSize: 9, color: D.textMuted, marginTop: 2, lineHeight: 1.4 }}>{m.catchphrase}</div>
-                  </button>
-                );
-              })}
-              <button onClick={() => setMemberId(null)}
-                style={{
-                  gridColumn: "span 2",
-                  background: memberId === null ? "rgba(255,105,180,0.15)" : "#14141e",
-                  border: `1.5px solid ${memberId === null ? "#FF69B4" : "rgba(255,255,255,0.08)"}`,
-                  borderRadius: 14, padding: 12, cursor: "pointer",
-                  color: memberId === null ? "#FF69B4" : D.textSub,
-                  fontSize: 13, fontWeight: memberId === null ? 700 : 400,
-                  transition: "all 0.3s ease",
-                }}>
-                💗 全員推し（きゅるして全体）
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ padding: "16px 20px", display: "flex", gap: 10, flexShrink: 0, borderTop: `1px solid ${D.border}` }}>
-        {step > 0 && (
-          <button onClick={() => setStep(s => s - 1)}
-            style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 12, padding: "12px 20px", color: D.textSub, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-            戻る
-          </button>
-        )}
-        <button onClick={() => step < 1 ? setStep(s => s + 1) : finish()}
-          style={{ flex: 1, background: "var(--accent)", border: "none", borderRadius: 12, padding: "12px", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-          {step < 1 ? "次へ →" : "はじめる ✨"}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // =====================
 // アーティストページ
@@ -1182,20 +1080,29 @@ export default function App() {
   const [viewMember, setViewMember] = useState(null);
   const [saved, setSaved] = useState([]);
   const [profile, setProfile] = useState({ artistId: "kyurushite", memberId: null });
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [onboardingDone, setOnboardingDone] = useState(
+    () => !!localStorage.getItem('torca_onboarding_done')
+  );
+  const [accentColor, setAccentColor] = useState(
+    () => localStorage.getItem('torca_accent') || DEFAULT_ACCENT
+  );
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     const el = document.documentElement;
     el.style.cssText = "height:100%;margin:0;padding:0;background:#0c0c12;";
-    el.style.setProperty("--accent", DEFAULT_ACCENT);
-    el.style.setProperty("--accent-rgb", DEFAULT_ACCENT_RGB);
     el.style.setProperty("--bg-primary", "#0c0c12");
-    el.style.setProperty("--bg-card", "#14141e");
-    el.style.setProperty("--bg-card-hover", "#1a1a28");
+    el.style.setProperty("--bg-card", "#13121f");
+    el.style.setProperty("--bg-card-hover", "#1a1828");
+    el.style.setProperty("--accent", accentColor);
+    el.style.setProperty("--accent-rgb", ACCENT_RGB_MAP[accentColor] || DEFAULT_ACCENT_RGB);
+    el.style.setProperty("--accent-light", "#f472b6");
+    el.style.setProperty("--accent2", "#a855f7");
     el.style.setProperty("--text-primary", "#ffffff");
-    el.style.setProperty("--text-secondary", "#aaaacc");
-    el.style.setProperty("--border-subtle", "rgba(255,255,255,0.08)");
-    el.style.setProperty("--glow-intensity", "0.4");
+    el.style.setProperty("--text-secondary", "rgba(255,255,255,0.55)");
+    el.style.setProperty("--text-muted", "rgba(255,255,255,0.35)");
+    el.style.setProperty("--border-subtle", "rgba(232,64,160,0.18)");
+    el.style.setProperty("--border-accent", "rgba(232,64,160,0.35)");
     document.body.style.cssText = [
       "height:100%;margin:0;padding:0;overflow:hidden;background:#0c0c12;",
       "background-image:radial-gradient(circle,rgba(255,255,255,0.03) 1px,transparent 1px);",
@@ -1207,15 +1114,19 @@ export default function App() {
 
   useEffect(() => {
     const m = profile.memberId ? findMember("kyurushite", profile.memberId) : null;
-    applyAccent(m?.color || DEFAULT_ACCENT);
+    applyAccent(m?.color || accentColor);
   }, [profile.memberId]);
 
   const toggleSave = (id) => setSaved(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
   const addVideo = (v) => { setVideos(prev => [v, ...prev]); setTab("home"); };
 
-  const finishOnboarding = ({ memberId }) => {
-    setProfile({ artistId: "kyurushite", memberId });
-    setShowOnboarding(false);
+  const handleOnboardingComplete = ({ memberId, memberColor }) => {
+    localStorage.setItem('torca_onboarding_done', '1');
+    localStorage.setItem('torca_accent', memberColor);
+    document.documentElement.style.setProperty('--accent', memberColor);
+    setAccentColor(memberColor);
+    setOnboardingDone(true);
+    setProfile({ artistId: 'kyurushite', memberId: memberId === 'all' ? null : memberId });
   };
 
   const navigateTo = (t) => { setTab(t); setViewArtist(null); setViewMember(null); };
@@ -1226,8 +1137,6 @@ export default function App() {
     setViewArtist(null);
     setViewMember(null);
   };
-
-  if (showOnboarding) return <Onboarding onComplete={finishOnboarding} />;
 
   if (selected) return (
     <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", fontFamily: "'Hiragino Sans','Noto Sans JP',sans-serif" }}>
@@ -1275,7 +1184,7 @@ export default function App() {
         <MyTab profile={profile} videos={videos}
           onSelectVideo={setSelected}
           onSelectMember={(aId, mId) => { setViewArtist(aId); setViewMember(mId); }}
-          onSave={toggleSave} saved={saved} onChangePush={() => setShowOnboarding(true)} />
+          onSave={toggleSave} saved={saved} onChangePush={() => { localStorage.removeItem('torca_onboarding_done'); setOnboardingDone(false); }} />
       );
       case "ai-search": return <AISearchTab />;
       case "url-import": return <URLImportTab onAdd={addVideo} />;
@@ -1298,22 +1207,25 @@ export default function App() {
   };
 
   return (
-    <div style={{ fontFamily: "'Hiragino Sans','Noto Sans JP',sans-serif", background: D.bg, width: "100vw", height: "100dvh", overflow: "hidden", color: D.text, display: "flex", flexDirection: "column" }}>
+    <>
+      {!splashDone && <Splash onFinish={() => setSplashDone(true)} />}
+      {!onboardingDone && <Onboarding onComplete={handleOnboardingComplete} />}
+      <div style={{ fontFamily: "'DM Sans', 'Noto Sans JP', -apple-system, sans-serif", background: D.bg, width: "100vw", height: "100dvh", overflow: "hidden", color: D.text, display: "flex", flexDirection: "column" }}>
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
         {/* PCサイドバー */}
         {!isMobile && (
           <div style={{ width: 200, flexShrink: 0, background: D.surface, borderRight: `1px solid ${D.border}`, display: "flex", flexDirection: "column", padding: "20px 12px" }}>
             <div style={{ marginBottom: 24, paddingLeft: 8 }}>
-              <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: "-0.04em", background: "linear-gradient(90deg,#FF69B4,#ff8ec7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>TORCA</div>
+              <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: "0.1em", background: "linear-gradient(120deg, #f472b6 0%, #a855f7 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>TORCA</div>
               <div style={{ fontSize: 9, color: D.textMuted, letterSpacing: "0.1em", marginTop: 1 }}>きゅるして撮可アーカイブ</div>
               <div style={{ fontSize: 8, color: D.textMuted, marginTop: 4, lineHeight: 1.5 }}>💛💜🩷❤️<br />きゅるしてのための撮可アーカイブ</div>
             </div>
             {mainTabs.map(t => (
               <button key={t.key} onClick={() => navigateTo(t.key)}
-                style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", borderRadius: 10, border: "none", cursor: "pointer", background: tab === t.key ? D.accentBg : "transparent", marginBottom: 2, width: "100%", textAlign: "left", transition: "all 0.15s" }}>
+                style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", borderRadius: 10, border: tab === t.key ? "1px solid rgba(232,64,160,0.28)" : "1px solid transparent", cursor: "pointer", background: tab === t.key ? "linear-gradient(120deg, rgba(232,64,160,0.18), rgba(168,85,247,0.18))" : "transparent", marginBottom: 2, width: "100%", textAlign: "left", transition: "all 0.15s" }}>
                 <span style={{ fontSize: 15 }}>{t.icon}</span>
-                <span style={{ fontSize: 13, fontWeight: tab === t.key ? 700 : 400, color: tab === t.key ? D.accentLight : D.textSub }}>{t.label}</span>
+                <span style={{ fontSize: 13, fontWeight: tab === t.key ? 700 : 400, color: tab === t.key ? "#f472b6" : D.textSub }}>{t.label}</span>
               </button>
             ))}
             <div style={{ marginTop: "auto", fontSize: 9, color: D.textMuted, lineHeight: 1.6, paddingLeft: 8 }}>
@@ -1325,10 +1237,10 @@ export default function App() {
         {/* メインコラム */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
           {/* ヘッダー */}
-          <div style={{ background: `linear-gradient(180deg, rgba(var(--accent-rgb),0.12) 0%, ${D.surface} 100%)`, borderBottom: `1px solid ${D.border}`, padding: isMobile ? "10px 14px" : "12px 20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ background: "linear-gradient(135deg, #1a0a2e 0%, #130c20 50%, #0f0c1a 100%)", borderBottom: `1px solid ${D.border}`, padding: isMobile ? "10px 14px" : "12px 20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             {isMobile && (
               <div>
-                <div style={{ fontSize: 17, fontWeight: 900, background: "linear-gradient(90deg,#FF69B4,#ff8ec7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>TORCA</div>
+                <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "0.1em", background: "linear-gradient(120deg, #f472b6 0%, #a855f7 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>TORCA</div>
                 <div style={{ fontSize: 8, color: D.textMuted, lineHeight: 1.4 }}>💛💜🩷❤️ きゅるしてのための撮可アーカイブ</div>
               </div>
             )}
@@ -1344,7 +1256,7 @@ export default function App() {
                 <button onClick={() => navigateTo("home")}
                   style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>← 戻る</button>
               )}
-              <button onClick={() => setShowOnboarding(true)}
+              <button onClick={() => { localStorage.removeItem('torca_onboarding_done'); setOnboardingDone(false); }}
                 style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>?</button>
             </div>
           </div>
@@ -1372,5 +1284,6 @@ export default function App() {
         </div>
       </div>
     </div>
+    </>
   );
 }
