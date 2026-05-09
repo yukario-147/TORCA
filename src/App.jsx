@@ -242,7 +242,7 @@ function VideoCard({ v, onSelect, onSave, isSaved, showFocus = true }) {
 function ArtistPage({ artist, videos, onSelectVideo, onSelectMember, onSave, saved, onBack }) {
   const groupVideos = videos.filter(v => v.artistId === artist.id);
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       <button onClick={onBack} style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 10, padding: "6px 14px", color: D.text, cursor: "pointer", fontSize: 12, fontWeight: 600, marginBottom: 16 }}>← 戻る</button>
       <div style={{ background: `linear-gradient(135deg,${artist.color}25,${artist.color}05)`, border: `1px solid ${artist.color}30`, borderRadius: 18, padding: "20px 18px", marginBottom: 18, display: "flex", alignItems: "center", gap: 14 }}>
         <div style={{ fontSize: 50 }}>{artist.emoji}</div>
@@ -292,7 +292,7 @@ function ArtistPage({ artist, videos, onSelectVideo, onSelectMember, onSave, sav
 function MemberPage({ artist, member, videos, onSelectVideo, onSave, saved, onBack }) {
   const memberVideos = videos.filter(v => v.artistId === artist.id && v.focusMemberId === member.id);
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       <button onClick={onBack} style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 10, padding: "6px 14px", color: D.text, cursor: "pointer", fontSize: 12, fontWeight: 600, marginBottom: 16 }}>← 戻る</button>
       <div style={{ background: `linear-gradient(135deg,${member.color}30,${member.color}08)`, border: `1px solid ${member.color}40`, borderRadius: 18, padding: "22px 20px", marginBottom: 18, textAlign: "center" }}>
         <div style={{ fontSize: 60, marginBottom: 8 }}>{member.emoji}</div>
@@ -729,7 +729,7 @@ function HomeTab({ videos, profile, onSelectVideo, onSelectArtist, onSave, saved
   const isFiltering = search !== "" || quality !== "すべて" || source !== "すべて";
 
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       {/* きゅるして情報セクション */}
       <div style={{ background: "linear-gradient(135deg,rgba(255,105,180,0.12),rgba(255,105,180,0.02))", border: "1px solid rgba(255,105,180,0.2)", borderRadius: 18, padding: "14px 14px 16px", marginBottom: 16 }}>
         {/* タイトル */}
@@ -897,7 +897,7 @@ function MyTab({ profile, videos, onSelectVideo, onSelectMember, onSave, saved, 
   const groupVideos = videos.filter(v => v.artistId === "kyurushite");
 
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       <div style={{ background: `linear-gradient(135deg,${accentColor}30,${accentColor}06)`, border: `1px solid ${accentColor}40`, borderRadius: 18, padding: "20px 18px", marginBottom: 18, position: "relative" }}>
         <button onClick={onChangePush} style={{ position: "absolute", top: 12, right: 12, background: "rgba(0,0,0,0.3)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "4px 10px", color: D.textSub, fontSize: 10, cursor: "pointer" }}>変更</button>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -972,7 +972,7 @@ function LegalSection({ title, body }) {
 
 function TermsTab() {
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 16 }}>利用規約</div>
       <LegalSection title="サービスの目的" body="TORCAは、きゅるりんってしてみての撮影可能区間（撮可）映像を、X・TikTokから集約して閲覧しやすく整理する非公式ファンサービスです。" />
       <LegalSection title="動画の取り扱い" body="当サービスは動画を直接ホスティングせず、X・TikTokへの外部リンクのみを表示します。動画の著作権はアーティスト・レーベル・撮影者に帰属します。" />
@@ -985,7 +985,7 @@ function TermsTab() {
 
 function PrivacyTab() {
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 16 }}>プライバシーポリシー</div>
       <LegalSection title="収集する情報" body="当サービスが収集する情報は、お客様が設定した「推しメンバー」のみです。この情報はお使いのデバイスのローカルストレージに保存され、サーバーには送信されません。" />
       <LegalSection title="個人情報の送信" body="当サービスはサーバーへの個人情報の送信を一切行いません。" />
@@ -998,7 +998,7 @@ function PrivacyTab() {
 
 function AboutTab() {
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 16 }}>運営者情報</div>
       <div style={{ background: "linear-gradient(135deg,rgba(255,105,180,0.15),rgba(255,105,180,0.03))", border: "1px solid rgba(255,105,180,0.25)", borderRadius: 18, padding: "20px 18px", marginBottom: 14, textAlign: "center" }}>
         <div style={{ fontSize: 40, marginBottom: 8 }}>💗</div>
@@ -1030,7 +1030,7 @@ function TakedownTab() {
   };
 
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
+    <div>
       <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 6 }}>削除申請</div>
       <div style={{ fontSize: 12, color: D.textSub, marginBottom: 10, lineHeight: 1.6 }}>
         著作権者または正当な代理人のみ申請できます。
