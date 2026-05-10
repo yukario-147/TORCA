@@ -151,6 +151,7 @@ function Badge({ children, variant = "default" }) {
 // フッター
 // =====================
 function Footer({ onNav }) {
+  const [hovered, setHovered] = useState(null);
   return (
     <div style={{ background: D.surface, flexShrink: 0 }}>
       {/* グラデーションライン */}
@@ -159,7 +160,9 @@ function Footer({ onNav }) {
         <div style={{ display: "flex", justifyContent: "center", gap: 14, flexWrap: "wrap", marginBottom: 6 }}>
           {[["利用規約","terms"],["プライバシーポリシー","privacy"],["運営者情報","about"],["削除申請","takedown"]].map(([label, t]) => (
             <button key={t} onClick={() => onNav(t)}
-              style={{ background: "none", border: "none", color: D.textSub, fontSize: 11, cursor: "pointer", textDecoration: "underline", padding: 0 }}>
+              onMouseEnter={() => setHovered(t)}
+              onMouseLeave={() => setHovered(null)}
+              style={{ background: "none", border: "none", color: hovered === t ? "#fff" : D.textSub, fontSize: 11, cursor: "pointer", textDecoration: "underline", padding: 0, transition: "color 0.2s ease" }}>
               {label}
             </button>
           ))}
@@ -183,18 +186,25 @@ function Footer({ onNav }) {
 // =====================
 function VideoCard({ v, onSelect, onSave, isSaved, showFocus = true }) {
   const [hover, setHover] = useState(false);
+  const [pressed, setPressed] = useState(false);
   const artist = findArtist(v.artistId) || KYURUSHITE;
   const focusMember = v.focusMemberId ? findMember(v.artistId, v.focusMemberId) : null;
   return (
     <div
       onClick={() => onSelect(v)}
       onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseLeave={() => { setHover(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      onTouchStart={() => setPressed(true)}
+      onTouchEnd={() => setPressed(false)}
       style={{
-        background: hover ? "#1a1a28" : "#14141e",
-        border: `1px solid ${hover ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.08)"}`,
+        background: hover ? "#1c1b2e" : "#14141e",
+        border: `1px solid ${hover ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.07)"}`,
         borderRadius: 14, overflow: "hidden", cursor: "pointer",
-        transition: "all 0.25s ease", transform: hover ? "translateY(-2px)" : "none",
+        transition: "all 0.22s cubic-bezier(0.4,0,0.2,1)",
+        transform: pressed ? "scale(0.97)" : hover ? "translateY(-3px) scale(1.02)" : "scale(1)",
+        boxShadow: hover ? "0 10px 32px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)" : "0 2px 8px rgba(0,0,0,0.2)",
       }}
     >
       <div style={{ height: 90, background: `linear-gradient(135deg,${(focusMember?.color || artist.color)}25,${(focusMember?.color || artist.color)}06)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, position: "relative", borderBottom: `1px solid ${D.border}` }}>
@@ -225,8 +235,16 @@ function VideoCard({ v, onSelect, onSave, isSaved, showFocus = true }) {
         <div style={{ fontSize: 10, color: D.textMuted, marginBottom: 7 }}>📍 {v.venue}</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span style={{ fontSize: 10, color: D.textMuted }}>▶ {fmt(v.views)}</span>
-          <button onClick={e => { e.stopPropagation(); onSave(v.id); }}
-            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, color: isSaved ? D.pink : D.textMuted, padding: 0 }}>
+          <button
+            key={String(isSaved)}
+            onClick={e => { e.stopPropagation(); onSave(v.id); }}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: 15, color: isSaved ? D.pink : D.textMuted,
+              padding: "2px 4px", lineHeight: 1,
+              animation: isSaved ? "savePop 0.38s cubic-bezier(0.68,-0.55,0.27,1.55)" : undefined,
+              transition: "color 0.2s ease",
+            }}>
             {isSaved ? "♥" : "♡"}
           </button>
         </div>
@@ -710,6 +728,7 @@ function HomeTab({ videos, profile, onSelectVideo, onSelectArtist, onSave, saved
   const [search, setSearch] = useState("");
   const [quality, setQuality] = useState("すべて");
   const [source, setSource] = useState("すべて");
+  const [hoveredRankId, setHoveredRankId] = useState(null);
 
   const myMember = profile.memberId ? findMember("kyurushite", profile.memberId) : null;
   const recommendVideos = myMember
@@ -792,13 +811,13 @@ function HomeTab({ videos, profile, onSelectVideo, onSelectArtist, onSave, saved
       <div style={{ display: "flex", gap: 5, overflowX: "auto", paddingBottom: 12, scrollbarWidth: "none" }}>
         {QUALITIES.map(q => (
           <button key={q} onClick={() => setQuality(q)}
-            style={{ background: quality === q ? "var(--accent)" : "transparent", color: quality === q ? "#fff" : D.textSub, border: `1.5px solid ${quality === q ? "var(--accent)" : D.border}`, borderRadius: 8, padding: "3px 11px", fontSize: 11, fontWeight: quality === q ? 700 : 400, cursor: "pointer", whiteSpace: "nowrap" }}>
+            style={{ background: quality === q ? "var(--accent)" : "transparent", color: quality === q ? "#fff" : D.textSub, border: `1.5px solid ${quality === q ? "var(--accent)" : D.border}`, borderRadius: 8, padding: "3px 11px", fontSize: 11, fontWeight: quality === q ? 700 : 400, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)", transform: quality === q ? "scale(1.04)" : "scale(1)" }}>
             🎬 {q}
           </button>
         ))}
         {SOURCES.map(s => (
           <button key={s} onClick={() => setSource(s)}
-            style={{ background: source === s ? "var(--accent)" : "transparent", color: source === s ? "#fff" : D.textSub, border: `1.5px solid ${source === s ? "var(--accent)" : D.border}`, borderRadius: 8, padding: "3px 11px", fontSize: 11, fontWeight: source === s ? 700 : 400, cursor: "pointer", whiteSpace: "nowrap" }}>
+            style={{ background: source === s ? "var(--accent)" : "transparent", color: source === s ? "#fff" : D.textSub, border: `1.5px solid ${source === s ? "var(--accent)" : D.border}`, borderRadius: 8, padding: "3px 11px", fontSize: 11, fontWeight: source === s ? 700 : 400, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.18s cubic-bezier(0.4,0,0.2,1)", transform: source === s ? "scale(1.04)" : "scale(1)" }}>
             📱 {s}
           </button>
         ))}
@@ -827,7 +846,7 @@ function HomeTab({ videos, profile, onSelectVideo, onSelectArtist, onSave, saved
                   </div>
                 </div>
                 <button onClick={() => onSelectArtist("kyurushite")}
-                  style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 10, padding: "5px 11px", fontSize: 11, color: D.textSub, cursor: "pointer" }}>
+                  style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 10, padding: "5px 11px", fontSize: 11, color: D.textSub, cursor: "pointer", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)" }}>
                   もっと見る ↗
                 </button>
               </div>
@@ -857,9 +876,12 @@ function HomeTab({ videos, profile, onSelectVideo, onSelectArtist, onSave, saved
             {ranking.map((v, i) => {
               const a = findArtist(v.artistId) || KYURUSHITE;
               const fm = v.focusMemberId ? findMember(v.artistId, v.focusMemberId) : null;
+              const isRowHovered = hoveredRankId === v.id;
               return (
                 <div key={v.id} onClick={() => onSelectVideo(v)}
-                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: i < ranking.length - 1 ? `1px solid ${D.border}` : "none", cursor: "pointer" }}>
+                  onMouseEnter={() => setHoveredRankId(v.id)}
+                  onMouseLeave={() => setHoveredRankId(null)}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderBottom: i < ranking.length - 1 ? `1px solid ${D.border}` : "none", cursor: "pointer", background: isRowHovered ? "rgba(255,255,255,0.04)" : "transparent", transition: "background 0.18s ease", transform: isRowHovered ? "translateX(3px)" : "translateX(0)" }}>
                   <div style={{ fontSize: 18, fontWeight: 900, color: i < 3 ? D.gold : D.textMuted, width: 22, textAlign: "center" }}>{i + 1}</div>
                   <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg,${(fm?.color || a.color)}25,${(fm?.color || a.color)}10)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{fm?.emoji || a.emoji}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1227,9 +1249,9 @@ export default function App() {
             </div>
             {mainTabs.map(t => (
               <button key={t.key} onClick={() => navigateTo(t.key)}
-                style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", borderRadius: 10, border: tab === t.key ? "1px solid rgba(232,64,160,0.28)" : "1px solid transparent", cursor: "pointer", background: tab === t.key ? "linear-gradient(120deg, rgba(232,64,160,0.18), rgba(168,85,247,0.18))" : "transparent", marginBottom: 2, width: "100%", textAlign: "left", transition: "all 0.15s" }}>
-                <span style={{ fontSize: 15 }}>{t.icon}</span>
-                <span style={{ fontSize: 13, fontWeight: tab === t.key ? 700 : 400, color: tab === t.key ? "#f472b6" : D.textSub }}>{t.label}</span>
+                style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", borderRadius: 10, border: tab === t.key ? "1px solid rgba(232,64,160,0.28)" : "1px solid transparent", cursor: "pointer", background: tab === t.key ? "linear-gradient(120deg, rgba(232,64,160,0.18), rgba(168,85,247,0.18))" : "transparent", marginBottom: 2, width: "100%", textAlign: "left", transition: "all 0.22s cubic-bezier(0.4,0,0.2,1)" }}>
+                <span style={{ fontSize: tab === t.key ? 17 : 15, transition: "font-size 0.2s cubic-bezier(0.4,0,0.2,1)", display: "block" }}>{t.icon}</span>
+                <span style={{ fontSize: 13, fontWeight: tab === t.key ? 700 : 400, color: tab === t.key ? "#f472b6" : D.textSub, transition: "color 0.2s ease" }}>{t.label}</span>
               </button>
             ))}
             <div style={{ marginTop: "auto", fontSize: 9, color: D.textMuted, lineHeight: 1.6, paddingLeft: 8 }}>
@@ -1281,9 +1303,9 @@ export default function App() {
             <div style={{ background: D.surface, borderTop: `1px solid ${D.border}`, display: "flex", justifyContent: "space-around", padding: "8px 0 env(safe-area-inset-bottom, 12px)", flexShrink: 0 }}>
               {mainTabs.map(t => (
                 <div key={t.key} onClick={() => navigateTo(t.key)}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, cursor: "pointer", opacity: tab === t.key ? 1 : 0.4, padding: "4px 6px", flex: 1 }}>
-                  <span style={{ fontSize: 19 }}>{t.icon}</span>
-                  <span style={{ fontSize: 9, fontWeight: tab === t.key ? 800 : 400, color: tab === t.key ? D.accentLight : D.textMuted }}>{t.label}</span>
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, cursor: "pointer", opacity: tab === t.key ? 1 : 0.45, padding: "4px 6px", flex: 1, transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)", transform: tab === t.key ? "translateY(-2px)" : "translateY(0)" }}>
+                  <span style={{ fontSize: tab === t.key ? 21 : 19, transition: "font-size 0.2s cubic-bezier(0.4,0,0.2,1)", display: "block" }}>{t.icon}</span>
+                  <span style={{ fontSize: 9, fontWeight: tab === t.key ? 800 : 400, color: tab === t.key ? D.accentLight : D.textMuted, transition: "color 0.2s ease" }}>{t.label}</span>
                 </div>
               ))}
             </div>

@@ -2,12 +2,63 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button, input, textarea, select {
   font-family: inherit;
   font-size: inherit;
 }
+
+/* ── グローバルボタンアニメーション ── */
+button {
+  transition: filter 0.15s ease, transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  will-change: transform;
+}
+button:not([disabled]):hover {
+  filter: brightness(1.12);
+}
+button:not([disabled]):active {
+  transform: scale(0.91) !important;
+  transition: transform 0.07s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* ── リンクホバー ── */
+a {
+  transition: opacity 0.2s ease, filter 0.2s ease;
+}
+a:not([style*="text-decoration: none"]):hover {
+  opacity: 0.75;
+}
+
+/* ── フォーカスリング ── */
+:focus-visible {
+  outline: 2px solid var(--accent, #FF69B4);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── セーブポップアニメーション ── */
+@keyframes savePop {
+  0%   { transform: scale(1)    rotate(0deg);   }
+  30%  { transform: scale(1.55) rotate(-12deg); }
+  65%  { transform: scale(0.88) rotate(6deg);   }
+  100% { transform: scale(1)    rotate(0deg);   }
+}
+
+/* ── フェードスライドイン ── */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── スクロール慣性 ── */
+html { scroll-behavior: smooth; }
 
 @keyframes pageIn {
   from { opacity: 0; transform: translateY(10px); }
