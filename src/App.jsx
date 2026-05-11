@@ -1,17 +1,7 @@
 import { useState, useEffect } from "react";
 import Onboarding from './Onboarding.jsx';
 import Splash from './Splash.jsx';
-
-async function callAI(systemPrompt, userMessage) {
-  const res = await fetch("/api/ai", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ systemPrompt, userMessage }),
-  });
-  const data = await res.json();
-  if (data.error) throw new Error(data.error);
-  return data.text;
-}
+import { buildQuery, buildSnsUrls, periodToPublishedAfter } from './searchDict.js';
 
 const xUrl = (q) => `https://x.com/search?q=${encodeURIComponent(q)}&f=live`;
 const tkUrl = (q) => `https://www.tiktok.com/search?q=${encodeURIComponent(q)}`;
@@ -420,301 +410,456 @@ function DetailView({ v, onBack, onSave, isSaved }) {
 }
 
 // =====================
-// AI検索
+// 検索タブ
 // =====================
-function AISearchTab() {
-  const [query, setQuery] = useState("");
+const MEMBERS_FILTER = [
+  { id: 'all', label: '全員', emoji: '💛💜🩷❤️' },
+  { id: '島村嬉唄', label: '島村嬉唄', emoji: '💛', color: '#FFD700' },
+  { id: '環やね',   label: '環やね',   emoji: '💜', color: '#9B59B6' },
+  { id: 'チバゆな', label: 'チバゆな', emoji: '🩷', color: '#FF69B4' },
+  { id: '逃げ水あむ',label: '逃げ水あむ',emoji: '❤️', color: '#E74C3C' },
+];
+
+const VENUES_FILTER = [
+  { id: '', label: '会場指定なし' },
+  { id: '幕張', label: '幕張イベントホール' },
+  { id: 'Kアリーナ', label: 'Kアリーナ横浜' },
+  { id: 'zepp新宿', label: 'Zepp Shinjuku' },
+  { id: '日比谷', label: '日比谷野外音楽堂' },
+  { id: 'zepp名古屋', label: 'Zepp Nagoya' },
+  { id: 'かなでびあ', label: 'Kanadevia Hall' },
+];
+
+const PERIODS_FILTER = [
+  { id: 'all', label: 'すべての期間' },
+  { id: 'month', label: '直近1ヶ月' },
+  { id: 'week', label: '直近1週間' },
+];
+
+const SNS_PLATFORMS = [
+  { id: 'youtube', label: 'YouTube', icon: '▶', color: '#FF0000' },
+  { id: 'x',       label: 'X (Twitter)', icon: '✕', color: '#1DA1F2' },
+  { id: 'tiktok',  label: 'TikTok', icon: '♪', color: '#69C9D0' },
+  { id: 'instagram',label: 'Instagram', icon: '◎', color: '#E1306C' },
+];
+
+function SearchTab() {
+  const [query, setQuery] = useState('');
+  const [memberFilter, setMemberFilter] = useState('all');
+  const [venueFilter, setVenueFilter] = useState('');
+  const [periodFilter, setPeriodFilter] = useState('all');
+  const [activePlatforms, setActivePlatforms] = useState(['youtube', 'x', 'tiktok', 'instagram']);
+  const [sortMode, setSortMode] = useState('relevance');
+  const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
-
-  const SYSTEM = `あなたは日本のライブ撮影・推し活文化に詳しいアシスタントです。
-ユーザーがアーティスト名を入力したら、SNS（X・TikTok）でファンが投稿しているライブ映像（撮可・推しカメラ・ファンカム・live切り抜きなど）を見つけるためのキーワードを生成してください。
-
-以下のJSONのみ返してください。バッククォート不要。
-
-{
-  "artist": "正式なアーティスト名",
-  "kana": "読み（カナ）",
-  "type": "group or band or solo or duo",
-  "description": "アーティストの簡単な紹介（2文以内）",
-  "emoji": "アーティストに合う絵文字1文字",
-  "primaryTags": ["#最も使われる撮可・ファンカム系タグ", "#〇〇撮可"],
-  "secondaryTags": ["#live切り抜き", "#推しカメラ", "#ファンカム", "#〇〇live"],
-  "tiktokKeywords": ["○○ 撮可", "○○ ファンカム", "○○ live"],
-  "members": [{"name":"メンバー名","searchTerm":"そのメンバーをSNSで検索する時のワード"}],
-  "tips": ["撮可・推しカメラを探すコツ1", "コツ2", "コツ3"]
-}
-
-membersは、グループの場合のみ実在メンバーを記載。ソロ・バンドの場合は空配列[]。`;
-
-  const search = async () => {
-    if (!query.trim()) return;
-    setLoading(true); setError(null); setResult(null);
+  const [error, setError] = useState('');
+  const [nextPageToken, setNextPageToken] = useState(null);
+  const [searched, setSearched] = useState(false);
+  const [snsUrls, setSnsUrls] = useState({});
+  const [detectedInfo, setDetectedInfo] = useState(null);
+  const [bookmarks, setBookmarks] = useState(() => {
     try {
-      const raw = await callAI(SYSTEM, query);
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      const allXTags = [...(parsed.primaryTags || []), ...(parsed.secondaryTags || [])];
-      const orQuery = allXTags.slice(0, 3).join(" OR ");
-      setResult({
-        ...parsed,
-        xOrUrl: xUrl(orQuery),
-        tiktokOrUrl: tkUrl((parsed.tiktokKeywords || []).slice(0, 2).join(" ")),
-      });
-    } catch {
-      setError("AIの応答を取得できませんでした。もう一度お試しください。");
+      return JSON.parse(localStorage.getItem('torca_bookmarks') || '[]');
+    } catch { return []; }
+  });
+
+  const saveBookmarks = (bms) => {
+    setBookmarks(bms);
+    localStorage.setItem('torca_bookmarks', JSON.stringify(bms));
+  };
+
+  const toggleBookmark = (video) => {
+    const exists = bookmarks.find(b => b.videoId === video.videoId);
+    if (exists) {
+      saveBookmarks(bookmarks.filter(b => b.videoId !== video.videoId));
+    } else {
+      saveBookmarks([...bookmarks, { ...video, savedAt: new Date().toISOString() }]);
+    }
+  };
+
+  const isBookmarked = (videoId) => bookmarks.some(b => b.videoId === videoId);
+
+  const togglePlatform = (id) => {
+    setActivePlatforms(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
+
+  const scoreVideo = (video, q) => {
+    let score = 0;
+    const title = (video.title || '').toLowerCase();
+    const desc = (video.description || '').toLowerCase();
+    const lq = q.toLowerCase();
+    if (title.includes('撮可')) score += 30;
+    if (title.includes('きゅるして') || title.includes('きゅるりん')) score += 20;
+    if (lq && title.includes(lq)) score += 25;
+    if (lq && desc.includes(lq)) score += 10;
+    const daysOld = (Date.now() - new Date(video.publishedAt).getTime()) / (1000 * 86400);
+    if (daysOld < 7) score += 20;
+    else if (daysOld < 30) score += 10;
+    return score;
+  };
+
+  const sortResults = (items, mode, q) => {
+    if (mode === 'date') {
+      return [...items].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+    } else if (mode === 'relevance') {
+      return [...items].sort((a, b) => scoreVideo(b, q) - scoreVideo(a, q));
+    }
+    return items;
+  };
+
+  const doSearch = async (pageToken = null) => {
+    const filters = {
+      member: memberFilter !== 'all' ? memberFilter : null,
+      venue: venueFilter || null,
+      period: periodFilter,
+    };
+
+    const { youtubeQuery, snsQuery, detectedMembers, detectedVenues } = buildQuery(query, filters);
+    const publishedAfter = periodToPublishedAfter(periodFilter);
+    const snsLinks = buildSnsUrls(snsQuery, activePlatforms);
+
+    setSnsUrls(snsLinks);
+    setDetectedInfo({ detectedMembers, detectedVenues, youtubeQuery });
+    setLoading(true);
+    setError('');
+    setSearched(true);
+
+    try {
+      const params = new URLSearchParams({ q: youtubeQuery, maxResults: '20' });
+      if (publishedAfter) params.append('publishedAfter', publishedAfter);
+      if (pageToken) params.append('pageToken', pageToken);
+
+      const res = await fetch(`/api/youtube-search?${params.toString()}`);
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || 'Search failed');
+
+      const sorted = sortResults(data.items || [], sortMode, query);
+      if (pageToken) {
+        setResults(prev => [...prev, ...sorted]);
+      } else {
+        setResults(sorted);
+      }
+      setNextPageToken(data.nextPageToken || null);
+    } catch (err) {
+      setError('検索に失敗しました。しばらくしてからもう一度お試しください。');
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleSearch = () => {
+    setResults([]);
+    setNextPageToken(null);
+    doSearch(null);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleSearch();
+  };
+
+  const formatDate = (iso) => {
+    const d = new Date(iso);
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  };
+
   return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 4 }}>🤖 AI 撮可検索</div>
-        <div style={{ fontSize: 12, color: D.textSub, lineHeight: 1.6 }}>アーティスト名を入力すると、AIが撮可・推しカメラ・ファンカムなど複数のキーワードを生成します。</div>
-      </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-        <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && search()}
-          placeholder="例：きゅるりんってしてみて..."
-          style={{ flex: 1, background: D.surface, border: `1px solid ${D.border}`, borderRadius: 12, padding: "11px 14px", color: D.text, fontSize: 14, outline: "none" }} />
-        <button onClick={search} disabled={loading || !query.trim()}
-          style={{ background: loading ? D.textMuted : "var(--accent)", border: "none", borderRadius: 12, padding: "11px 18px", color: "#fff", fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
-          {loading ? "..." : "検索"}
-        </button>
-      </div>
-      {error && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 12, padding: "12px", color: "#f87171", fontSize: 13, marginBottom: 14 }}>{error}</div>}
-      {loading && (
-        <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <div style={{ fontSize: 28, marginBottom: 10, animation: "spin 1s linear infinite", display: "inline-block" }}>✦</div>
-          <div style={{ color: D.textSub, fontSize: 12 }}>AIが複数のキーワードを生成中...</div>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div style={{ padding: '0 0 80px 0' }}>
+      <div style={{ padding: '20px 16px 0' }}>
+        <h2 style={{
+          fontSize: 20, fontWeight: 800, margin: '0 0 4px',
+          background: 'linear-gradient(120deg, var(--accent-light), var(--accent2))',
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+        }}>
+          撮可を探す
+        </h2>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 16px' }}>
+          YouTube検索 ＋ X / TikTok / Instagram への導線
+        </p>
+
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="例：うたちゃんの幕張 / あむちゃんソロ / やねぴのダンスシーン"
+            style={{
+              width: '100%', padding: '14px 52px 14px 16px', borderRadius: 12,
+              border: '1.5px solid var(--border-subtle)', background: 'var(--bg-card)',
+              color: 'var(--text-primary)', fontSize: 15, outline: 'none', boxSizing: 'border-box',
+              transition: 'border-color 0.2s',
+            }}
+            onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border-subtle)'}
+          />
+          <button
+            onClick={handleSearch}
+            style={{
+              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+              background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+              border: 'none', borderRadius: 8, padding: '8px 14px',
+              color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+            }}
+          >
+            検索
+          </button>
         </div>
-      )}
-      {result && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 14, padding: 16, display: "flex", alignItems: "center", gap: 14 }}>
-            <span style={{ fontSize: 40 }}>{result.emoji}</span>
-            <div>
-              <div style={{ fontSize: 17, fontWeight: 900 }}>{result.artist}</div>
-              <div style={{ fontSize: 10, color: D.textMuted }}>{result.kana} ・ {result.type}</div>
-              <div style={{ fontSize: 11, color: D.textSub, marginTop: 4, lineHeight: 1.5 }}>{result.description}</div>
-            </div>
+
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>メンバー</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {MEMBERS_FILTER.map(m => (
+              <button
+                key={m.id}
+                onClick={() => setMemberFilter(m.id)}
+                style={{
+                  padding: '5px 12px', borderRadius: 20,
+                  border: memberFilter === m.id ? `1.5px solid ${m.color || 'var(--accent)'}` : '1.5px solid var(--border-subtle)',
+                  background: memberFilter === m.id ? `${m.color || 'var(--accent)'}22` : 'var(--bg-card)',
+                  color: memberFilter === m.id ? (m.color || 'var(--accent)') : 'var(--text-secondary)',
+                  fontSize: 12, fontWeight: memberFilter === m.id ? 700 : 400,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+              >
+                {m.emoji} {m.label}
+              </button>
+            ))}
           </div>
-          <div style={{ background: "linear-gradient(135deg,rgba(255,105,180,0.12),rgba(232,67,147,0.08))", border: "1px solid rgba(255,105,180,0.3)", borderRadius: 14, padding: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: D.accentLight, marginBottom: 8 }}>⚡ ワンタップ一括検索（OR検索）</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <a href={result.xOrUrl} target="_blank" rel="noopener noreferrer"
-                style={{ background: "rgba(0,0,0,0.4)", border: `1px solid ${D.border}`, borderRadius: 10, padding: "10px 12px", textDecoration: "none", textAlign: "center" }}>
-                <div style={{ fontSize: 16, marginBottom: 3 }}>𝕏</div>
-                <div style={{ fontSize: 11, color: D.text, fontWeight: 700 }}>X 一括検索 ↗</div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <select
+            value={venueFilter}
+            onChange={e => setVenueFilter(e.target.value)}
+            style={{
+              padding: '7px 10px', borderRadius: 8, border: '1.5px solid var(--border-subtle)',
+              background: 'var(--bg-card)', color: 'var(--text-secondary)',
+              fontSize: 12, cursor: 'pointer', flex: 1, minWidth: 140,
+            }}
+          >
+            {VENUES_FILTER.map(v => (
+              <option key={v.id} value={v.id}>{v.label}</option>
+            ))}
+          </select>
+          <select
+            value={periodFilter}
+            onChange={e => setPeriodFilter(e.target.value)}
+            style={{
+              padding: '7px 10px', borderRadius: 8, border: '1.5px solid var(--border-subtle)',
+              background: 'var(--bg-card)', color: 'var(--text-secondary)',
+              fontSize: 12, cursor: 'pointer', flex: 1, minWidth: 120,
+            }}
+          >
+            {PERIODS_FILTER.map(p => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>検索先SNS</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {SNS_PLATFORMS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => togglePlatform(p.id)}
+                style={{
+                  padding: '5px 12px', borderRadius: 20,
+                  border: activePlatforms.includes(p.id) ? `1.5px solid ${p.color}` : '1.5px solid var(--border-subtle)',
+                  background: activePlatforms.includes(p.id) ? `${p.color}22` : 'var(--bg-card)',
+                  color: activePlatforms.includes(p.id) ? p.color : 'var(--text-secondary)',
+                  fontSize: 12, fontWeight: activePlatforms.includes(p.id) ? 700 : 400,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+              >
+                {p.icon} {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {searched && Object.keys(snsUrls).length > 0 && (
+        <div style={{
+          margin: '0 16px 16px', padding: '12px 14px', borderRadius: 10,
+          background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
+        }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>
+            各SNSで同じクエリを検索する
+            {detectedInfo?.detectedMembers?.length > 0 && (
+              <span style={{ marginLeft: 8, color: 'var(--accent-light)' }}>
+                📍 {detectedInfo.detectedMembers[0]}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {SNS_PLATFORMS.filter(p => snsUrls[p.id]).map(p => (
+              <a
+                key={p.id}
+                href={snsUrls[p.id]}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '6px 14px', borderRadius: 20,
+                  background: `${p.color}22`, border: `1px solid ${p.color}44`,
+                  color: p.color, fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                }}
+              >
+                {p.icon} {p.label}で開く
               </a>
-              <a href={result.tiktokOrUrl} target="_blank" rel="noopener noreferrer"
-                style={{ background: "rgba(255,0,80,0.08)", border: "1px solid rgba(255,0,80,0.2)", borderRadius: 10, padding: "10px 12px", textDecoration: "none", textAlign: "center" }}>
-                <div style={{ fontSize: 16, marginBottom: 3 }}>🎵</div>
-                <div style={{ fontSize: 11, color: D.text, fontWeight: 700 }}>TikTok 検索 ↗</div>
-              </a>
-            </div>
-          </div>
-          <div style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 14, padding: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: D.accentLight, marginBottom: 8 }}>𝕏 メインタグ</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-              {result.primaryTags?.map(t => (
-                <a key={t} href={xUrl(t)} target="_blank" rel="noopener noreferrer"
-                  style={{ background: D.accentBg, border: "1px solid rgba(255,105,180,0.3)", borderRadius: 8, padding: "4px 10px", fontSize: 11, color: D.accentLight, textDecoration: "none", fontWeight: 600 }}>{t} ↗</a>
-              ))}
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: D.textSub, marginBottom: 8 }}>関連タグ（推しカメラ・ファンカム等）</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-              {result.secondaryTags?.map(t => (
-                <a key={t} href={xUrl(t)} target="_blank" rel="noopener noreferrer"
-                  style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "4px 10px", fontSize: 11, color: D.textSub, textDecoration: "none" }}>{t} ↗</a>
-              ))}
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: "#ff4060", marginBottom: 8 }}>TikTok キーワード</div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {result.tiktokKeywords?.map(k => (
-                <a key={k} href={tkUrl(k)} target="_blank" rel="noopener noreferrer"
-                  style={{ background: "rgba(255,64,96,0.1)", border: "1px solid rgba(255,64,96,0.2)", borderRadius: 8, padding: "4px 10px", fontSize: 11, color: "#ff6080", textDecoration: "none", fontWeight: 600 }}>{k} ↗</a>
-              ))}
-            </div>
-          </div>
-          {result.members && result.members.length > 0 && (
-            <div style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 14, padding: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 800, color: D.pink, marginBottom: 10 }}>📷 メンバー別検索</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                {result.members.map(m => (
-                  <a key={m.name} href={xUrl(m.searchTerm)} target="_blank" rel="noopener noreferrer"
-                    style={{ background: "rgba(232,67,147,0.08)", border: "1px solid rgba(232,67,147,0.2)", borderRadius: 10, padding: "8px 10px", textDecoration: "none" }}>
-                    <div style={{ fontSize: 12, color: D.text, fontWeight: 700 }}>{m.name}</div>
-                    <div style={{ fontSize: 9, color: D.textMuted }}>{m.searchTerm} ↗</div>
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-          <div style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 14, padding: 14 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: D.gold, marginBottom: 10 }}>💡 コツ</div>
-            {result.tips?.map((tip, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6, fontSize: 11, color: D.textSub, lineHeight: 1.6 }}>
-                <div style={{ width: 16, height: 16, borderRadius: "50%", background: D.accentBg, color: D.accentLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, flexShrink: 0, marginTop: 1 }}>{i + 1}</div>
-                {tip}
-              </div>
             ))}
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-// =====================
-// URL登録
-// =====================
-function URLImportTab({ onAdd }) {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState(null);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
-
-  const SYSTEM = `XやTikTokのライブ動画のURL・投稿テキストを解析して、以下のJSONのみ返してください。バッククォート不要。
-
-{
-  "artist": "アーティスト名（不明なら不明）",
-  "song": "曲名（不明なら不明）",
-  "venue": "会場名（不明なら不明）",
-  "date": "YYYY-MM-DD（不明なら2025-01-01）",
-  "quality": "4K or 1080p or 720p（判断できなければ1080p）",
-  "source": "X or TikTok",
-  "focusMember": "メンバー名（推しカメラの場合のみ。不明なら空文字）",
-  "tags": ["#タグ1", "#タグ2"],
-  "confidence": "high or medium or low",
-  "note": "AIが自動解析した情報です。正確性をご確認ください。"
-}`;
-
-  const analyze = async () => {
-    if (!url.trim()) return;
-    setLoading(true); setError(null); setPreview(null); setSuccess(false);
-    try {
-      const raw = await callAI(SYSTEM, url);
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      const matched = ARTISTS.find(a =>
-        a.name === parsed.artist || a.searchTerms.some(t => parsed.artist?.includes(t))
-      );
-      let focusMemberId = null;
-      if (matched && parsed.focusMember) {
-        const m = matched.members.find(mem => mem.name === parsed.focusMember || parsed.focusMember.includes(mem.name));
-        if (m) focusMemberId = m.id;
-      }
-      setPreview({
-        ...parsed,
-        artistId: matched?.id || "kyurushite",
-        artistName: matched?.name || parsed.artist,
-        artistColor: matched?.color || "#FF69B4",
-        artistEmoji: matched?.emoji || "💗",
-        focusMemberId,
-        focusMemberName: focusMemberId ? findMember((matched || KYURUSHITE).id, focusMemberId)?.name : null,
-        sourceUrl: url.startsWith("http") ? url : "#",
-        isAI: true, isOfficial: false,
-        views: 1000, likes: 100,
-      });
-    } catch {
-      setError("解析に失敗しました。XまたはTikTokのURLや投稿テキストを入力してください。");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const register = () => {
-    if (!preview) return;
-    onAdd({
-      id: Date.now(),
-      artistId: preview.artistId, focusMemberId: preview.focusMemberId,
-      memberIds: preview.focusMemberId ? [preview.focusMemberId] : [],
-      song: preview.song, venue: preview.venue, date: preview.date,
-      quality: preview.quality, source: preview.source, sourceUrl: preview.sourceUrl,
-      tags: preview.tags || [], views: preview.views, likes: preview.likes,
-      isOfficial: false, isAI: true, trending: false, note: preview.note,
-    });
-    setSuccess(true); setUrl(""); setPreview(null);
-    setTimeout(() => setSuccess(false), 3000);
-  };
-
-  const confColor = { high: D.green, medium: D.gold, low: D.red };
-  const confLabel = { high: "✓ 高精度", medium: "△ 中精度", low: "⚠ 低精度" };
-
-  return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
-      <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 17, fontWeight: 900, marginBottom: 4 }}>🔗 URL登録（AI自動解析）</div>
-        <div style={{ fontSize: 12, color: D.textSub, lineHeight: 1.6 }}>XまたはTikTokのURL・投稿テキストを貼ると、AIが情報を解析してカードを生成します。</div>
-      </div>
-      {success && (
-        <div style={{ background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 12, padding: "11px 14px", color: "#34d399", fontSize: 13, marginBottom: 14, fontWeight: 600 }}>
-          ✓ カードを登録しました！
+      {searched && !loading && results.length > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 16px', marginBottom: 12,
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{results.length}件</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[{ id: 'relevance', label: '関連度' }, { id: 'date', label: '新しい順' }].map(s => (
+              <button
+                key={s.id}
+                onClick={() => {
+                  setSortMode(s.id);
+                  setResults(prev => sortResults([...prev], s.id, query));
+                }}
+                style={{
+                  padding: '4px 12px', borderRadius: 20,
+                  border: sortMode === s.id ? '1.5px solid var(--accent)' : '1.5px solid var(--border-subtle)',
+                  background: sortMode === s.id ? 'rgba(224,64,160,0.15)' : 'transparent',
+                  color: sortMode === s.id ? 'var(--accent-light)' : 'var(--text-secondary)',
+                  fontSize: 11, fontWeight: sortMode === s.id ? 700 : 400, cursor: 'pointer',
+                }}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <input value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && analyze()}
-          placeholder="https://x.com/... または投稿テキスト"
-          style={{ flex: 1, background: D.surface, border: `1px solid ${D.border}`, borderRadius: 12, padding: "11px 14px", color: D.text, fontSize: 13, outline: "none" }} />
-        <button onClick={analyze} disabled={loading || !url.trim()}
-          style={{ background: loading ? D.textMuted : "var(--accent)", border: "none", borderRadius: 12, padding: "11px 18px", color: "#fff", fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer" }}>
-          {loading ? "..." : "解析"}
-        </button>
-      </div>
-      {error && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 12, padding: "11px", color: "#f87171", fontSize: 13, marginBottom: 14 }}>{error}</div>}
+
       {loading && (
-        <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <div style={{ fontSize: 28, marginBottom: 10 }}>🔍</div>
-          <div style={{ color: D.textSub, fontSize: 12 }}>解析中...</div>
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
+          <div style={{
+            width: 32, height: 32,
+            border: '3px solid var(--border-subtle)', borderTop: '3px solid var(--accent)',
+            borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px',
+          }} />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          <p style={{ fontSize: 13 }}>検索中...</p>
         </div>
       )}
-      {preview && (
-        <div style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 14, overflow: "hidden" }}>
-          <div style={{ height: 86, background: `linear-gradient(135deg,${preview.artistColor}25,${preview.artistColor}06)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, position: "relative", borderBottom: `1px solid ${D.border}` }}>
-            {preview.artistEmoji}
-            <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 4 }}>
-              <Badge variant={preview.quality}>{preview.quality}</Badge>
-              <Badge variant="ai">✦ AI</Badge>
-            </div>
-            <div style={{ position: "absolute", top: 8, right: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: confColor[preview.confidence], background: `${confColor[preview.confidence]}18`, border: `1px solid ${confColor[preview.confidence]}30`, borderRadius: 5, padding: "2px 7px" }}>
-                {confLabel[preview.confidence]}
-              </span>
-            </div>
-          </div>
-          <div style={{ padding: 16 }}>
-            <div style={{ fontSize: 10, color: preview.artistColor, fontWeight: 700, marginBottom: 3 }}>{preview.artistName}</div>
-            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 12 }}>「{preview.song}」</div>
-            {preview.focusMemberName && (
-              <div style={{ background: "rgba(232,67,147,0.1)", border: "1px solid rgba(232,67,147,0.3)", borderRadius: 10, padding: "8px 12px", marginBottom: 12, fontSize: 11, color: D.pink, fontWeight: 700 }}>
-                📷 推しカメラ：{preview.focusMemberName}
-              </div>
-            )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 12 }}>
-              {[["📍", preview.venue], ["📅", preview.date], ["🎬", preview.quality], ["📱", preview.source]].map(([l, val]) => (
-                <div key={l} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 8, padding: "8px 10px" }}>
-                  <div style={{ fontSize: 10, color: D.textMuted }}>{l}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700 }}>{val}</div>
+
+      {error && (
+        <div style={{
+          margin: '0 16px', padding: '12px 16px', borderRadius: 10,
+          background: 'rgba(231,76,60,0.12)', border: '1px solid rgba(231,76,60,0.3)',
+          color: '#e74c3c', fontSize: 13,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {!searched && !loading && (
+        <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
+          <p style={{ fontSize: 14, margin: 0 }}>メンバー名やニックネームで検索してみよう</p>
+          <p style={{ fontSize: 12, marginTop: 6 }}>例：「あむちゃん 幕張」「やねぴのソロ」</p>
+        </div>
+      )}
+
+      {!loading && results.length > 0 && (
+        <div style={{ padding: '0 16px' }}>
+          {results.map(video => (
+            <div
+              key={video.videoId}
+              style={{
+                background: 'var(--bg-card)', borderRadius: 12,
+                border: '1px solid var(--border-subtle)', marginBottom: 12, overflow: 'hidden',
+              }}
+            >
+              <a
+                href={`https://www.youtube.com/watch?v=${video.videoId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+              >
+                {video.thumbnail && (
+                  <div style={{ position: 'relative' }}>
+                    <img
+                      src={video.thumbnail}
+                      alt={video.title}
+                      style={{ width: '100%', display: 'block', aspectRatio: '16/9', objectFit: 'cover' }}
+                    />
+                    <div style={{
+                      position: 'absolute', bottom: 8, right: 8,
+                      background: 'rgba(0,0,0,0.7)', borderRadius: 6, padding: '3px 8px',
+                      color: '#fff', fontSize: 11, fontWeight: 700,
+                    }}>
+                      ▶ YouTube
+                    </div>
+                  </div>
+                )}
+              </a>
+              <div style={{ padding: '10px 12px 12px' }}>
+                <p style={{
+                  fontSize: 13, fontWeight: 600, margin: '0 0 4px', lineHeight: 1.4,
+                  display: '-webkit-box', WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                }}>
+                  {video.title}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{video.channelTitle}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8 }}>{formatDate(video.publishedAt)}</span>
+                  </div>
+                  <button
+                    onClick={() => toggleBookmark(video)}
+                    style={{
+                      background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18,
+                      padding: '2px 4px',
+                      color: isBookmarked(video.videoId) ? 'var(--accent)' : 'var(--text-secondary)',
+                      transition: 'color 0.2s',
+                    }}
+                    title={isBookmarked(video.videoId) ? 'ブックマーク解除' : 'ブックマーク'}
+                  >
+                    {isBookmarked(video.videoId) ? '♥' : '♡'}
+                  </button>
                 </div>
-              ))}
+              </div>
             </div>
-            <div style={{ background: D.accentBg, borderRadius: 10, padding: "8px 12px", marginBottom: 12, fontSize: 11, color: D.textSub, lineHeight: 1.6 }}>
-              📌 {preview.note}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={register} style={{ flex: 1, background: "var(--accent)", border: "none", borderRadius: 10, padding: 11, color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
-                ✓ 登録
-              </button>
-              <button onClick={() => setPreview(null)} style={{ background: "rgba(255,255,255,0.06)", border: `1px solid ${D.border}`, borderRadius: 10, padding: "11px 14px", color: D.textSub, fontSize: 12, cursor: "pointer" }}>
-                取消
-              </button>
-            </div>
-          </div>
+          ))}
+
+          {nextPageToken && (
+            <button
+              onClick={() => doSearch(nextPageToken)}
+              disabled={loading}
+              style={{
+                width: '100%', padding: '14px', borderRadius: 12,
+                border: '1.5px solid var(--border-subtle)', background: 'var(--bg-card)',
+                color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer', marginBottom: 16,
+              }}
+            >
+              もっと見る
+            </button>
+          )}
+        </div>
+      )}
+
+      {searched && !loading && results.length === 0 && !error && (
+        <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
+          <p style={{ fontSize: 14, margin: 0 }}>動画が見つかりませんでした</p>
+          <p style={{ fontSize: 12, marginTop: 6 }}>別のキーワードを試してみてください</p>
         </div>
       )}
     </div>
@@ -976,6 +1121,39 @@ function MyTab({ profile, videos, onSelectVideo, onSelectMember, onSave, saved, 
           );
         })}
       </div>
+
+      {(() => {
+        const bms = (() => {
+          try { return JSON.parse(localStorage.getItem('torca_bookmarks') || '[]'); }
+          catch { return []; }
+        })();
+        if (bms.length === 0) return null;
+        return (
+          <div style={{ marginTop: 24 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+              ♥ ブックマーク済み撮可動画
+            </div>
+            {bms.map(video => (
+              <div key={video.videoId} style={{
+                marginBottom: 10, padding: '10px 12px', borderRadius: 10,
+                background: D.surface, border: `1px solid ${D.border}`,
+              }}>
+                <a
+                  href={`https://www.youtube.com/watch?v=${video.videoId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ textDecoration: 'none', color: D.text, fontSize: 13, fontWeight: 600 }}
+                >
+                  {video.title}
+                </a>
+                <div style={{ fontSize: 11, color: D.textMuted, marginTop: 4 }}>
+                  {video.channelTitle} · {new Date(video.publishedAt).toLocaleDateString('ja-JP')}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1095,7 +1273,7 @@ export default function App() {
   const bp = useBreakpoint();
   const isMobile = bp === "mobile";
 
-  const [videos, setVideos] = useState(INITIAL_VIDEOS);
+  const [videos] = useState(INITIAL_VIDEOS);
   const [tab, setTab] = useState("home");
   const [selected, setSelected] = useState(null);
   const [viewArtist, setViewArtist] = useState(null);
@@ -1142,7 +1320,6 @@ export default function App() {
   }, [profile.memberId]);
 
   const toggleSave = (id) => setSaved(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  const addVideo = (v) => { setVideos(prev => [v, ...prev]); setTab("home"); };
 
   const handleOnboardingComplete = ({ memberId, memberColor }) => {
     localStorage.setItem('torca_onboarding_done', '1');
@@ -1169,21 +1346,19 @@ export default function App() {
   );
 
   const mainTabs = [
-    { key: "home",       icon: "🏠", label: "ホーム" },
-    { key: "my",         icon: "💖", label: "推し" },
-    { key: "ai-search",  icon: "🤖", label: "検索" },
-    { key: "url-import", icon: "🔗", label: "投稿" },
-    { key: "saved",      icon: "♥",  label: "保存" },
+    { key: "home",   icon: "🏠", label: "ホーム" },
+    { key: "my",     icon: "💖", label: "推し" },
+    { key: "search", icon: "🔍", label: "検索" },
+    { key: "saved",  icon: "♥",  label: "保存" },
   ];
 
   const tabTitles = {
-    "ai-search":  "🤖 AI 検索",
-    "url-import": "🔗 URL登録",
-    "saved":      "♥ 保存済み",
-    "terms":      "利用規約",
-    "privacy":    "プライバシーポリシー",
-    "about":      "運営者情報",
-    "takedown":   "削除申請",
+    "search":  "🔍 撮可を探す",
+    "saved":   "♥ 保存済み",
+    "terms":   "利用規約",
+    "privacy": "プライバシーポリシー",
+    "about":   "運営者情報",
+    "takedown":"削除申請",
   };
 
   const isLegalTab = ["terms","privacy","about","takedown"].includes(tab);
@@ -1210,8 +1385,7 @@ export default function App() {
           onSelectMember={(aId, mId) => { setViewArtist(aId); setViewMember(mId); }}
           onSave={toggleSave} saved={saved} onChangePush={() => { localStorage.removeItem('torca_onboarding_done'); setOnboardingDone(false); }} />
       );
-      case "ai-search": return <AISearchTab />;
-      case "url-import": return <URLImportTab onAdd={addVideo} />;
+      case "search": return <SearchTab />;
       case "saved": return saved.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 0", color: D.textMuted }}>
           <div style={{ fontSize: 36, marginBottom: 10 }}>♡</div>
