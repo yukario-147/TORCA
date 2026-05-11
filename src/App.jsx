@@ -448,6 +448,7 @@ function SearchTab() {
   const [memberFilter, setMemberFilter] = useState('all');
   const [venueFilter, setVenueFilter] = useState('');
   const [periodFilter, setPeriodFilter] = useState('all');
+  const [activePlatforms, setActivePlatforms] = useState(['youtube', 'x', 'tiktok', 'instagram']);
   const [sortMode, setSortMode] = useState('relevance');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -484,6 +485,12 @@ function SearchTab() {
 
   const isBookmarked = (videoId) => bookmarks.some(b => b.videoId === videoId);
 
+  const togglePlatform = (id) => {
+    setActivePlatforms(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    );
+  };
+
   const scoreVideo = (video, q) => {
     let score = 0;
     const title = (video.title || '').toLowerCase();
@@ -517,7 +524,7 @@ function SearchTab() {
 
     const { youtubeQuery, snsQuery, detectedMembers, detectedVenues } = buildQuery(query, filters);
     const publishedAfter = periodToPublishedAfter(periodFilter);
-    const snsLinks = buildSnsUrls(snsQuery, ['x', 'tiktok', 'instagram']);
+    const snsLinks = buildSnsUrls(snsQuery, activePlatforms);
 
     setSnsUrls(snsLinks);
     setDetectedInfo({ detectedMembers, detectedVenues, youtubeQuery });
@@ -711,6 +718,28 @@ function SearchTab() {
           </select>
         </div>
 
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>検索先SNS</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {SNS_PLATFORMS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => togglePlatform(p.id)}
+                style={{
+                  padding: '5px 12px', borderRadius: 20,
+                  border: activePlatforms.includes(p.id) ? `1.5px solid ${p.color}` : '1.5px solid var(--border-subtle)',
+                  background: activePlatforms.includes(p.id) ? `${p.color}22` : 'var(--bg-card)',
+                  color: activePlatforms.includes(p.id) ? p.color : 'var(--text-secondary)',
+                  fontSize: 12, fontWeight: activePlatforms.includes(p.id) ? 700 : 400,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+              >
+                {p.icon} {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* URL アーカイブ */}
         <div style={{ marginBottom: 8 }}>
           <button
@@ -798,7 +827,7 @@ function SearchTab() {
           background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
         }}>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>
-            SNS アプリで検索する
+            各SNSで同じクエリを検索する
             {detectedInfo?.detectedMembers?.length > 0 && (
               <span style={{ marginLeft: 8, color: 'var(--accent-light)' }}>
                 📍 {detectedInfo.detectedMembers[0]}
@@ -806,7 +835,7 @@ function SearchTab() {
             )}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {SNS_PLATFORMS.filter(p => p.id !== 'youtube' && snsUrls[p.id]).map(p => (
+            {SNS_PLATFORMS.filter(p => snsUrls[p.id]).map(p => (
               <a
                 key={p.id}
                 href={snsUrls[p.id]}
@@ -1582,15 +1611,17 @@ export default function App() {
   );
 
   const mainTabs = [
-    { key: "home",   icon: "🏠", label: "ホーム" },
-    { key: "my",     icon: "💖", label: "推し" },
-    { key: "search", icon: "🔍", label: "検索" },
-    { key: "saved",  icon: "♥",  label: "保存済み" },
+    { key: "home",    icon: "🏠", label: "ホーム" },
+    { key: "my",      icon: "💖", label: "推し" },
+    { key: "search",  icon: "🔍", label: "検索" },
+    { key: "archive", icon: "📼", label: "みんなの撮可" },
+    { key: "saved",   icon: "♥",  label: "保存" },
   ];
 
   const tabTitles = {
-    "search": "🔍 撮可を探す",
-    "saved":  "♥ 保存済み",
+    "search":  "🔍 撮可を探す",
+    "archive": "📼 みんなの撮可",
+    "saved":   "♥ 保存済み",
     "terms":   "利用規約",
     "privacy": "プライバシーポリシー",
     "about":   "運営者情報",
@@ -1621,8 +1652,18 @@ export default function App() {
           onSelectMember={(aId, mId) => { setViewArtist(aId); setViewMember(mId); }}
           onSave={toggleSave} saved={saved} onChangePush={() => { localStorage.removeItem('torca_onboarding_done'); setOnboardingDone(false); }} />
       );
-      case "search": return <SearchTab />;
-      case "saved":  return <ArchiveTab />;
+      case "search":  return <SearchTab />;
+      case "archive": return <ArchiveTab />;
+      case "saved": return saved.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: D.textMuted }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>♡</div>
+          <div style={{ fontSize: 13 }}>保存したクリップはありません</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          {videos.filter(v => saved.includes(v.id)).map(v => <VideoCard key={v.id} v={v} onSelect={setSelected} onSave={toggleSave} isSaved={true} />)}
+        </div>
+      );
       case "terms":    return <TermsTab />;
       case "privacy":  return <PrivacyTab />;
       case "about":    return <AboutTab />;

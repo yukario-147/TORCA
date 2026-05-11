@@ -102,8 +102,7 @@ export function buildQuery(input, filters = {}) {
   }
   remainingText = remainingText.trim();
 
-  // 常に「きゅるして」を先頭に置き、グループ無関係の動画を除外
-  const youtubeParts = ['きゅるして'];
+  const youtubeParts = [];
   if (memberTerms.length > 0) {
     youtubeParts.push(memberTerms.join(' OR '));
   }
@@ -113,7 +112,11 @@ export function buildQuery(input, filters = {}) {
   if (remainingText) {
     youtubeParts.push(remainingText);
   }
-  youtubeParts.push('撮可');
+  if (!text && !filters.member && !filters.venue) {
+    youtubeParts.push('きゅるりんってしてみて 撮可');
+  } else {
+    youtubeParts.push('きゅるして 撮可');
+  }
 
   const youtubeQuery = youtubeParts.join(' ');
 
