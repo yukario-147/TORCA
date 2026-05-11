@@ -462,6 +462,12 @@ function SearchTab() {
       return JSON.parse(localStorage.getItem('torca_bookmarks') || '[]');
     } catch { return []; }
   });
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [archiveUrl, setArchiveUrl] = useState('');
+  const [archiveMember, setArchiveMember] = useState('');
+  const [archiveNote, setArchiveNote] = useState('');
+  const [archiveSaving, setArchiveSaving] = useState(false);
+  const [archiveMsg, setArchiveMsg] = useState('');
 
   const saveBookmarks = (bms) => {
     setBookmarks(bms);
@@ -564,6 +570,58 @@ function SearchTab() {
   const formatDate = (iso) => {
     const d = new Date(iso);
     return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  };
+
+  const detectPlatform = (url) => {
+    if (url.includes('x.com') || url.includes('twitter.com')) return 'x';
+    if (url.includes('tiktok.com')) return 'tiktok';
+    if (url.includes('instagram.com')) return 'instagram';
+    return null;
+  };
+
+  const saveToArchive = async () => {
+    const trimmed = archiveUrl.trim();
+    if (!trimmed) return;
+    const platform = detectPlatform(trimmed);
+    if (!platform) {
+      setArchiveMsg('X、TikTok、Instagram の URL を入力してください');
+      setTimeout(() => setArchiveMsg(''), 3000);
+      return;
+    }
+    setArchiveSaving(true);
+    const entry = {
+      id: 'arch_' + Date.now(),
+      url: trimmed,
+      platform,
+      member: archiveMember || null,
+      note: archiveNote.trim() || null,
+      savedAt: new Date().toISOString(),
+      thumbnailUrl: null,
+      title: null,
+      authorName: null,
+    };
+    if (platform !== 'instagram') {
+      try {
+        const r = await fetch(`/api/oembed?url=${encodeURIComponent(trimmed)}&platform=${platform}`);
+        if (r.ok) {
+          const oe = await r.json();
+          entry.title = oe.title || null;
+          entry.authorName = oe.authorName || null;
+          entry.thumbnailUrl = oe.thumbnailUrl || null;
+        }
+      } catch { /* oEmbed failure is non-critical */ }
+    }
+    const prev = (() => {
+      try { return JSON.parse(localStorage.getItem('torca_archive') || '[]'); }
+      catch { return []; }
+    })();
+    localStorage.setItem('torca_archive', JSON.stringify([entry, ...prev]));
+    setArchiveUrl('');
+    setArchiveNote('');
+    setArchiveMember('');
+    setArchiveMsg('アーカイブしました！');
+    setArchiveSaving(false);
+    setTimeout(() => setArchiveMsg(''), 3000);
   };
 
   return (
@@ -681,6 +739,86 @@ function SearchTab() {
             ))}
           </div>
         </div>
+
+        {/* URL アーカイブ */}
+        <div style={{ marginBottom: 8 }}>
+          <button
+            onClick={() => setArchiveOpen(o => !o)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              color: 'var(--text-secondary)', fontSize: 11, padding: 0, fontWeight: 600,
+            }}
+          >
+            <span style={{ transform: archiveOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
+            X / TikTok / Instagram の URL をアーカイブ
+          </button>
+          {archiveOpen && (
+            <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input
+                  type="url"
+                  value={archiveUrl}
+                  onChange={e => setArchiveUrl(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && saveToArchive()}
+                  placeholder="https://x.com/... または tiktok.com/..."
+                  style={{
+                    flex: 1, padding: '9px 12px', borderRadius: 8,
+                    border: '1.5px solid var(--border-subtle)', background: '#0c0c12',
+                    color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+                  }}
+                />
+                <button
+                  onClick={saveToArchive}
+                  disabled={archiveSaving}
+                  style={{
+                    padding: '9px 14px', borderRadius: 8, border: 'none',
+                    background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+                    color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {archiveSaving ? '...' : '保存'}
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <select
+                  value={archiveMember}
+                  onChange={e => setArchiveMember(e.target.value)}
+                  style={{
+                    padding: '7px 10px', borderRadius: 8, border: '1.5px solid var(--border-subtle)',
+                    background: '#0c0c12', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', flex: 1,
+                  }}
+                >
+                  <option value="">メンバー（任意）</option>
+                  {MEMBERS_FILTER.filter(m => m.id !== 'all').map(m => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={archiveNote}
+                  onChange={e => setArchiveNote(e.target.value)}
+                  placeholder="メモ（任意）"
+                  style={{
+                    flex: 1, padding: '7px 10px', borderRadius: 8,
+                    border: '1.5px solid var(--border-subtle)', background: '#0c0c12',
+                    color: 'var(--text-primary)', fontSize: 12, outline: 'none',
+                  }}
+                />
+              </div>
+              {archiveMsg && (
+                <div style={{
+                  fontSize: 12, padding: '6px 10px', borderRadius: 8, marginTop: 4,
+                  background: archiveMsg.includes('しました') ? 'rgba(16,185,129,0.15)' : 'rgba(231,76,60,0.15)',
+                  color: archiveMsg.includes('しました') ? '#34d399' : '#e74c3c',
+                }}>
+                  {archiveMsg}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {searched && Object.keys(snsUrls).length > 0 && (
@@ -782,60 +920,57 @@ function SearchTab() {
             <div
               key={video.videoId}
               style={{
-                background: 'var(--bg-card)', borderRadius: 12,
-                border: '1px solid var(--border-subtle)', marginBottom: 12, overflow: 'hidden',
+                display: 'flex', alignItems: 'stretch', position: 'relative',
+                background: 'var(--bg-card)', borderRadius: 10,
+                border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
               }}
             >
               <a
                 href={`https://www.youtube.com/watch?v=${video.videoId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+                style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}
               >
-                {video.thumbnail && (
-                  <div style={{ position: 'relative' }}>
-                    <img
-                      src={video.thumbnail}
-                      alt={video.title}
-                      style={{ width: '100%', display: 'block', aspectRatio: '16/9', objectFit: 'cover' }}
-                    />
-                    <div style={{
-                      position: 'absolute', bottom: 8, right: 8,
-                      background: 'rgba(0,0,0,0.7)', borderRadius: 6, padding: '3px 8px',
-                      color: '#fff', fontSize: 11, fontWeight: 700,
-                    }}>
-                      ▶ YouTube
-                    </div>
-                  </div>
+                {video.thumbnail ? (
+                  <img
+                    src={video.thumbnail}
+                    alt={video.title}
+                    style={{ width: 120, height: 68, objectFit: 'cover', flexShrink: 0 }}
+                  />
+                ) : (
+                  <div style={{
+                    width: 120, height: 68, flexShrink: 0, background: '#1a1828',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--text-secondary)', fontSize: 20,
+                  }}>▶</div>
                 )}
-              </a>
-              <div style={{ padding: '10px 12px 12px' }}>
-                <p style={{
-                  fontSize: 13, fontWeight: 600, margin: '0 0 4px', lineHeight: 1.4,
-                  display: '-webkit-box', WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                }}>
-                  {video.title}
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{video.channelTitle}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginLeft: 8 }}>{formatDate(video.publishedAt)}</span>
+                <div style={{ flex: 1, minWidth: 0, padding: '8px 36px 8px 10px' }}>
+                  <p style={{
+                    fontSize: 12, fontWeight: 600, margin: '0 0 4px', lineHeight: 1.4,
+                    color: 'var(--text-primary)',
+                    display: '-webkit-box', WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                  }}>
+                    {video.title}
+                  </p>
+                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                    {video.channelTitle} · {formatDate(video.publishedAt)}
                   </div>
-                  <button
-                    onClick={() => toggleBookmark(video)}
-                    style={{
-                      background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 18,
-                      padding: '2px 4px',
-                      color: isBookmarked(video.videoId) ? 'var(--accent)' : 'var(--text-secondary)',
-                      transition: 'color 0.2s',
-                    }}
-                    title={isBookmarked(video.videoId) ? 'ブックマーク解除' : 'ブックマーク'}
-                  >
-                    {isBookmarked(video.videoId) ? '♥' : '♡'}
-                  </button>
                 </div>
-              </div>
+              </a>
+              <button
+                onClick={() => toggleBookmark(video)}
+                style={{
+                  position: 'absolute', top: 6, right: 6,
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 16, padding: '2px 4px',
+                  color: isBookmarked(video.videoId) ? 'var(--accent)' : 'var(--text-secondary)',
+                  transition: 'color 0.2s',
+                }}
+                title={isBookmarked(video.videoId) ? 'ブックマーク解除' : 'ブックマーク'}
+              >
+                {isBookmarked(video.videoId) ? '♥' : '♡'}
+              </button>
             </div>
           ))}
 
@@ -867,18 +1002,204 @@ function SearchTab() {
 }
 
 // =====================
+// みんなの撮可（アーカイブタブ）
+// =====================
+const PLATFORM_CONFIG = {
+  youtube:   { label: 'YouTube', icon: '▶', color: '#FF0000' },
+  x:         { label: 'X',       icon: '✕', color: '#1DA1F2' },
+  tiktok:    { label: 'TikTok',  icon: '♪', color: '#69C9D0' },
+  instagram: { label: 'Instagram', icon: '◎', color: '#E1306C' },
+};
+
+function ArchiveTab() {
+  const [memberFilter, setMemberFilter] = useState('all');
+  const [platformFilter, setPlatformFilter] = useState('all');
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const bookmarks = (() => {
+    try { return JSON.parse(localStorage.getItem('torca_bookmarks') || '[]'); }
+    catch { return []; }
+  })().map(b => ({
+    id: 'yt_' + b.videoId,
+    platform: 'youtube',
+    url: `https://www.youtube.com/watch?v=${b.videoId}`,
+    title: b.title,
+    authorName: b.channelTitle,
+    thumbnailUrl: b.thumbnail,
+    member: null,
+    note: null,
+    savedAt: b.savedAt || new Date().toISOString(),
+    videoId: b.videoId,
+  }));
+
+  const archive = (() => {
+    try { return JSON.parse(localStorage.getItem('torca_archive') || '[]'); }
+    catch { return []; }
+  })();
+
+  const allItems = [...bookmarks, ...archive].sort((a, b) =>
+    new Date(b.savedAt) - new Date(a.savedAt)
+  );
+
+  const filtered = allItems.filter(item => {
+    if (memberFilter !== 'all' && item.member !== memberFilter) return false;
+    if (platformFilter !== 'all' && item.platform !== platformFilter) return false;
+    return true;
+  });
+
+  const removeItem = (item) => {
+    if (item.platform === 'youtube') {
+      const bms = (() => {
+        try { return JSON.parse(localStorage.getItem('torca_bookmarks') || '[]'); }
+        catch { return []; }
+      })();
+      localStorage.setItem('torca_bookmarks', JSON.stringify(bms.filter(b => b.videoId !== item.videoId)));
+    } else {
+      const arc = (() => {
+        try { return JSON.parse(localStorage.getItem('torca_archive') || '[]'); }
+        catch { return []; }
+      })();
+      localStorage.setItem('torca_archive', JSON.stringify(arc.filter(a => a.id !== item.id)));
+    }
+    setRefreshKey(k => k + 1);
+  };
+
+  const memberLabel = (memberId) => {
+    if (!memberId) return null;
+    return MEMBERS_FILTER.find(m => m.id === memberId);
+  };
+
+  return (
+    <div key={refreshKey} style={{ padding: '0 0 80px 0' }}>
+      <div style={{ padding: '16px 16px 0' }}>
+        <h2 style={{
+          fontSize: 20, fontWeight: 800, margin: '0 0 4px',
+          background: 'linear-gradient(120deg, var(--accent-light), var(--accent2))',
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+        }}>みんなの撮可</h2>
+        <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 12px', lineHeight: 1.5 }}>
+          現在はあなたのアーカイブを表示しています。今後ファン同士で共有予定。
+        </p>
+
+        {/* プラットフォームフィルター */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {[{ id: 'all', label: 'すべて' }, ...Object.entries(PLATFORM_CONFIG).map(([id, c]) => ({ id, label: c.label }))].map(p => {
+            const cfg = PLATFORM_CONFIG[p.id];
+            return (
+              <button key={p.id} onClick={() => setPlatformFilter(p.id)} style={{
+                padding: '4px 12px', borderRadius: 20, fontSize: 11,
+                border: platformFilter === p.id ? `1.5px solid ${cfg?.color || 'var(--accent)'}` : '1.5px solid var(--border-subtle)',
+                background: platformFilter === p.id ? `${cfg?.color || 'var(--accent)'}22` : 'var(--bg-card)',
+                color: platformFilter === p.id ? (cfg?.color || 'var(--accent)') : 'var(--text-secondary)',
+                fontWeight: platformFilter === p.id ? 700 : 400, cursor: 'pointer', transition: 'all 0.2s',
+              }}>
+                {cfg ? `${cfg.icon} ` : ''}{p.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* メンバーフィルター */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+          {MEMBERS_FILTER.map(m => (
+            <button key={m.id} onClick={() => setMemberFilter(m.id)} style={{
+              padding: '4px 12px', borderRadius: 20, fontSize: 11,
+              border: memberFilter === m.id ? `1.5px solid ${m.color || 'var(--accent)'}` : '1.5px solid var(--border-subtle)',
+              background: memberFilter === m.id ? `${m.color || 'var(--accent)'}22` : 'var(--bg-card)',
+              color: memberFilter === m.id ? (m.color || 'var(--accent)') : 'var(--text-secondary)',
+              fontWeight: memberFilter === m.id ? 700 : 400, cursor: 'pointer', transition: 'all 0.2s',
+            }}>
+              {m.emoji} {m.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 12 }}>
+          {filtered.length}件
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📼</div>
+          <p style={{ fontSize: 14, margin: 0 }}>まだアーカイブがありません</p>
+          <p style={{ fontSize: 12, marginTop: 6 }}>検索タブでお気に入りを ♡ してみよう</p>
+        </div>
+      ) : (
+        <div style={{ padding: '0 16px' }}>
+          {filtered.map(item => {
+            const cfg = PLATFORM_CONFIG[item.platform] || PLATFORM_CONFIG.youtube;
+            const ml = memberLabel(item.member);
+            return (
+              <div key={item.id} style={{
+                display: 'flex', alignItems: 'stretch', position: 'relative',
+                background: 'var(--bg-card)', borderRadius: 10,
+                border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
+              }}>
+                <a href={item.url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}>
+                  {item.thumbnailUrl ? (
+                    <img src={item.thumbnailUrl} alt={item.title || item.note || ''} style={{ width: 120, height: 68, objectFit: 'cover', flexShrink: 0 }} />
+                  ) : (
+                    <div style={{
+                      width: 120, height: 68, flexShrink: 0, background: `${cfg.color}18`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 24, color: cfg.color,
+                    }}>{cfg.icon}</div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0, padding: '8px 36px 8px 10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
+                        background: `${cfg.color}22`, color: cfg.color,
+                      }}>{cfg.icon} {cfg.label}</span>
+                      {ml && (
+                        <span style={{ fontSize: 9, color: ml.color, fontWeight: 700 }}>
+                          {ml.emoji} {ml.label}
+                        </span>
+                      )}
+                    </div>
+                    <p style={{
+                      fontSize: 12, fontWeight: 600, margin: '0 0 3px', lineHeight: 1.4,
+                      color: 'var(--text-primary)',
+                      display: '-webkit-box', WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                    }}>
+                      {item.note || item.title || item.url}
+                    </p>
+                    {item.authorName && (
+                      <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{item.authorName}</div>
+                    )}
+                  </div>
+                </a>
+                <button
+                  onClick={() => removeItem(item)}
+                  style={{
+                    position: 'absolute', top: 6, right: 6,
+                    background: 'transparent', border: 'none', cursor: 'pointer',
+                    fontSize: 14, padding: '2px 4px', color: 'var(--text-secondary)',
+                    transition: 'color 0.2s',
+                  }}
+                  title="削除"
+                >✕</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================
 // ホーム
 // =====================
-function HomeTab({ videos, profile, onSelectVideo, onSelectArtist, onSave, saved, onGoToMember }) {
+function HomeTab({ videos, onSelectVideo, onSave, saved, onGoToMember }) {
   const [search, setSearch] = useState("");
   const [quality, setQuality] = useState("すべて");
   const [source, setSource] = useState("すべて");
   const [hoveredRankId, setHoveredRankId] = useState(null);
 
-  const myMember = profile.memberId ? findMember("kyurushite", profile.memberId) : null;
-  const recommendVideos = myMember
-    ? videos.filter(v => v.artistId === "kyurushite" && (v.focusMemberId === profile.memberId || v.memberIds.includes(profile.memberId)))
-    : videos.filter(v => v.artistId === "kyurushite");
   const trending = videos.filter(v => v.trending);
   const ranking = [...videos].sort((a, b) => b.views - a.views).slice(0, 5);
 
@@ -981,30 +1302,6 @@ function HomeTab({ videos, profile, onSelectVideo, onSelectArtist, onSave, saved
         </>
       ) : (
         <>
-          {recommendVideos.length > 0 && (
-            <>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontSize: 10, color: D.pink, letterSpacing: "0.1em", marginBottom: 2, fontWeight: 700 }}>FOR YOU</div>
-                  <div style={{ fontSize: 15, fontWeight: 900 }}>
-                    {myMember ? `${myMember.emoji} ${myMember.name}の推しカメラ` : "💗 きゅるして"}
-                  </div>
-                </div>
-                <button onClick={() => onSelectArtist("kyurushite")}
-                  style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 10, padding: "5px 11px", fontSize: 11, color: D.textSub, cursor: "pointer", transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)" }}>
-                  もっと見る ↗
-                </button>
-              </div>
-              <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6, marginBottom: 22, scrollbarWidth: "none" }}>
-                {recommendVideos.map(v => (
-                  <div key={v.id} style={{ minWidth: 160, flexShrink: 0 }}>
-                    <VideoCard v={v} onSelect={onSelectVideo} onSave={onSave} isSaved={saved.includes(v.id)} />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 10, color: D.red, letterSpacing: "0.1em", marginBottom: 2, fontWeight: 700 }}>🔥 TRENDING</div>
             <div style={{ fontSize: 15, fontWeight: 900 }}>急上昇中のクリップ</div>
@@ -1122,38 +1419,6 @@ function MyTab({ profile, videos, onSelectVideo, onSelectMember, onSave, saved, 
         })}
       </div>
 
-      {(() => {
-        const bms = (() => {
-          try { return JSON.parse(localStorage.getItem('torca_bookmarks') || '[]'); }
-          catch { return []; }
-        })();
-        if (bms.length === 0) return null;
-        return (
-          <div style={{ marginTop: 24 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
-              ♥ ブックマーク済み撮可動画
-            </div>
-            {bms.map(video => (
-              <div key={video.videoId} style={{
-                marginBottom: 10, padding: '10px 12px', borderRadius: 10,
-                background: D.surface, border: `1px solid ${D.border}`,
-              }}>
-                <a
-                  href={`https://www.youtube.com/watch?v=${video.videoId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{ textDecoration: 'none', color: D.text, fontSize: 13, fontWeight: 600 }}
-                >
-                  {video.title}
-                </a>
-                <div style={{ fontSize: 11, color: D.textMuted, marginTop: 4 }}>
-                  {video.channelTitle} · {new Date(video.publishedAt).toLocaleDateString('ja-JP')}
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
     </div>
   );
 }
@@ -1346,14 +1611,16 @@ export default function App() {
   );
 
   const mainTabs = [
-    { key: "home",   icon: "🏠", label: "ホーム" },
-    { key: "my",     icon: "💖", label: "推し" },
-    { key: "search", icon: "🔍", label: "検索" },
-    { key: "saved",  icon: "♥",  label: "保存" },
+    { key: "home",    icon: "🏠", label: "ホーム" },
+    { key: "my",      icon: "💖", label: "推し" },
+    { key: "search",  icon: "🔍", label: "検索" },
+    { key: "archive", icon: "📼", label: "みんなの撮可" },
+    { key: "saved",   icon: "♥",  label: "保存" },
   ];
 
   const tabTitles = {
     "search":  "🔍 撮可を探す",
+    "archive": "📼 みんなの撮可",
     "saved":   "♥ 保存済み",
     "terms":   "利用規約",
     "privacy": "プライバシーポリシー",
@@ -1385,7 +1652,8 @@ export default function App() {
           onSelectMember={(aId, mId) => { setViewArtist(aId); setViewMember(mId); }}
           onSave={toggleSave} saved={saved} onChangePush={() => { localStorage.removeItem('torca_onboarding_done'); setOnboardingDone(false); }} />
       );
-      case "search": return <SearchTab />;
+      case "search":  return <SearchTab />;
+      case "archive": return <ArchiveTab />;
       case "saved": return saved.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 0", color: D.textMuted }}>
           <div style={{ fontSize: 36, marginBottom: 10 }}>♡</div>
