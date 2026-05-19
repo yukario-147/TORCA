@@ -4,6 +4,22 @@
 import { expandQueries, periodToPublishedAfter, OFFICIAL_CHANNEL_IDS } from '../src/searchDict.js';
 import { scoreVideos } from './gemini-score.js';
 
+// きゅるりんってしてみてに関連するキーワード一覧（どれか1つでも含まれれば関連動画と判定）
+const KYURUSHITE_TERMS = [
+  'きゅるりんってしてみて', 'きゅるして', 'kyurushite', 'kyururin',
+  '島村嬉唄', 'うたちゃん', 'うちゃたん', 'しまむらうた',
+  '環やね', 'やねちゃん', 'やねぴ', 'たまきやね',
+  'チバゆな', 'ゆなちゃん',
+  '逃げ水あむ', 'あむちゃん', 'あむち', 'にげみずあむ',
+  'ディアステージ', 'dearstage',
+];
+
+function isKyurushiteRelated(item) {
+  if (item.isOfficial) return true;
+  const text = `${item.title} ${item.description} ${item.channelTitle}`.toLowerCase();
+  return KYURUSHITE_TERMS.some(kw => text.includes(kw.toLowerCase()));
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -125,15 +141,18 @@ export default async function handler(req, res) {
     };
   });
 
+  // きゅるして無関係な動画をサーバー側で排除
+  const relevant = items.filter(isKyurushiteRelated);
+
   // Gemini でスコアリング
-  let scored = items;
+  let scored = relevant;
   let geminiUsed = false;
   try {
-    scored = await scoreVideos(items);
+    scored = await scoreVideos(relevant);
     geminiUsed = scored.some(v => v.takaScore !== null && v.takaScore !== undefined);
   } catch (err) {
     console.error('Gemini scoring failed:', err);
-    scored = items.map(v => ({ ...v, takaScore: null, takaReason: null }));
+    scored = relevant.map(v => ({ ...v, takaScore: null, takaReason: null }));
   }
 
   return res.status(200).json({

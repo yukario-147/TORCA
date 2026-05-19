@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Onboarding from './Onboarding.jsx';
 import Splash from './Splash.jsx';
-import { buildQuery, buildSnsUrls } from './searchDict.js';
+import { buildQuery, buildSnsUrls, MEMBER_ALIASES } from './searchDict.js';
 
 const xUrl = (q) => `https://x.com/search?q=${encodeURIComponent(q)}&f=live`;
 const tkUrl = (q) => `https://www.tiktok.com/search?q=${encodeURIComponent(q)}`;
@@ -524,6 +524,18 @@ function SearchTab() {
     return items;
   };
 
+  // メンバー名・ニックネームをタイトル/説明で照合してポストフィルタリング
+  const filterByMember = (items, member) => {
+    if (!member || member === 'all') return items;
+    const aliases = (MEMBER_ALIASES[member] || [member])
+      .filter(a => /[^\x00-\x7F]/.test(a)); // 日本語エイリアスのみ（英字誤マッチ防止）
+    if (aliases.length === 0) return items;
+    return items.filter(v => {
+      const text = `${v.title || ''} ${v.description || ''}`;
+      return aliases.some(alias => text.includes(alias));
+    });
+  };
+
   const doSearch = async () => {
     const filters = {
       member: memberFilter !== 'all' ? memberFilter : null,
@@ -876,7 +888,8 @@ function SearchTab() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <div>
               <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {filterByContent(results, contentFilter).length}件
+                {filterByContent(filterByMember(results, memberFilter), contentFilter).length}件
+                {memberFilter !== 'all' && <span style={{ marginLeft: 4, color: 'var(--accent-light)', fontSize: 11 }}>({memberFilter})</span>}
               </span>
               {searchStats && (
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
@@ -961,7 +974,7 @@ function SearchTab() {
 
       {!loading && results.length > 0 && (
         <div style={{ padding: '0 16px' }}>
-          {filterByContent(results, contentFilter).map(video => {
+          {filterByContent(filterByMember(results, memberFilter), contentFilter).map(video => {
             const score = video.takaScore;
             const isOff = video.isOfficial;
             let badgeText = null;
@@ -1049,6 +1062,19 @@ function SearchTab() {
           <div style={{ fontSize: 36, marginBottom: 12 }}>🔍</div>
           <p style={{ fontSize: 14, margin: 0 }}>動画が見つかりませんでした</p>
           <p style={{ fontSize: 12, marginTop: 6 }}>別のキーワードを試してみてください</p>
+        </div>
+      )}
+
+      {searched && !loading && results.length > 0 &&
+        filterByContent(filterByMember(results, memberFilter), contentFilter).length === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>🔎</div>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            {memberFilter !== 'all'
+              ? `${memberFilter}の動画が見つかりませんでした`
+              : 'このフィルターに該当する動画がありません'}
+          </p>
+          <p style={{ fontSize: 11, marginTop: 6, color: 'var(--text-muted)' }}>フィルターを変更してみてください</p>
         </div>
       )}
     </div>
