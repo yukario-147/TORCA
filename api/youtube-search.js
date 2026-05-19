@@ -1,78 +1,145 @@
 // api/youtube-search.js
-// Vercel Functions - YouTube Data API v3 プロキシ
+// Vercel Functions - YouTube 並列検索 + Gemini スコアリング
+
+import { expandQueries, periodToPublishedAfter, OFFICIAL_CHANNEL_IDS } from '../src/searchDict.js';
+import { scoreVideos } from './gemini-score.js';
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const apiKey = process.env.YOUTUBE_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'YouTube API key not configured' });
+  if (!apiKey) return res.status(500).json({ error: 'YouTube API key not configured' });
+
+  const { userInput = '', filters = {}, order = 'relevance' } = req.body || {};
+
+  if (!userInput && !filters.member && !filters.venue) {
+    return res.status(400).json({ error: 'userInput is required' });
   }
 
-  const {
-    q,
-    publishedAfter,
-    maxResults = '20',
-    pageToken,
-  } = req.query;
+  const queries = expandQueries(userInput, filters);
+  const publishedAfter = periodToPublishedAfter(filters.period);
 
-  if (!q) {
-    return res.status(400).json({ error: 'Query parameter q is required' });
+  // 並列 YouTube 検索
+  const searchResults = await Promise.allSettled(
+    queries.map(async (q) => {
+      const params = new URLSearchParams({
+        part: 'snippet',
+        type: 'video',
+        q,
+        maxResults: '10',
+        order: order === 'date' ? 'date' : 'relevance',
+        regionCode: 'JP',
+        relevanceLanguage: 'ja',
+        key: apiKey,
+      });
+      if (publishedAfter) params.append('publishedAfter', publishedAfter);
+
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/search?${params}`
+      );
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(JSON.stringify(err));
+      }
+      return response.json();
+    })
+  );
+
+  // 成功したクエリの結果を結合（失敗はスキップ）
+  const allItems = [];
+  for (const result of searchResults) {
+    if (result.status === 'fulfilled') {
+      allItems.push(...(result.value.items || []));
+    } else {
+      console.error('YouTube query failed:', result.reason);
+    }
   }
 
+  // videoId で重複排除
+  const seen = new Set();
+  const deduped = [];
+  for (const item of allItems) {
+    const id = item.id?.videoId;
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      deduped.push(item);
+    }
+  }
+
+  if (deduped.length === 0) {
+    return res.status(200).json({
+      items: [],
+      totalQueried: queries.length,
+      totalDeduplicated: 0,
+      geminiUsed: false,
+    });
+  }
+
+  // /videos エンドポイントで statistics + 全文 description を一括取得
+  const videoIds = deduped.map(item => item.id.videoId).join(',');
+  const videoDetails = {};
   try {
-    const params = new URLSearchParams({
-      part: 'snippet',
-      type: 'video',
-      q,
-      maxResults,
-      order: 'relevance',
-      regionCode: 'JP',
-      relevanceLanguage: 'ja',
+    const detailParams = new URLSearchParams({
+      part: 'snippet,statistics',
+      id: videoIds,
       key: apiKey,
     });
-
-    if (publishedAfter) params.append('publishedAfter', publishedAfter);
-    if (pageToken) params.append('pageToken', pageToken);
-
-    const response = await fetch(
-      `https://www.googleapis.com/youtube/v3/search?${params.toString()}`
+    const detailRes = await fetch(
+      `https://www.googleapis.com/youtube/v3/videos?${detailParams}`
     );
-
-    if (!response.ok) {
-      const errData = await response.json();
-      console.error('YouTube API error:', errData);
-      return res.status(response.status).json({ error: 'YouTube API error', detail: errData });
+    if (detailRes.ok) {
+      const detailData = await detailRes.json();
+      for (const v of detailData.items || []) {
+        videoDetails[v.id] = v;
+      }
     }
-
-    const data = await response.json();
-
-    const items = (data.items || []).map(item => ({
-      videoId: item.id.videoId,
-      title: item.snippet.title,
-      channelTitle: item.snippet.channelTitle,
-      publishedAt: item.snippet.publishedAt,
-      thumbnail: item.snippet.thumbnails?.medium?.url || item.snippet.thumbnails?.default?.url,
-      description: item.snippet.description,
-    }));
-
-    return res.status(200).json({
-      items,
-      nextPageToken: data.nextPageToken || null,
-      totalResults: data.pageInfo?.totalResults || 0,
-    });
   } catch (err) {
-    console.error('youtube-search handler error:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('Failed to fetch video details:', err);
   }
+
+  // 整形
+  const items = deduped.map(item => {
+    const vid = item.id.videoId;
+    const detail = videoDetails[vid];
+    const snippet = detail?.snippet || item.snippet;
+    const stats = detail?.statistics || {};
+
+    return {
+      videoId: vid,
+      title: snippet.title || '',
+      description: snippet.description || '',
+      channelTitle: snippet.channelTitle || '',
+      channelId: snippet.channelId || '',
+      thumbnailUrl:
+        snippet.thumbnails?.medium?.url ||
+        snippet.thumbnails?.default?.url ||
+        '',
+      publishedAt: snippet.publishedAt || '',
+      viewCount: parseInt(stats.viewCount || '0', 10),
+      isOfficial: OFFICIAL_CHANNEL_IDS.includes(snippet.channelId || ''),
+    };
+  });
+
+  // Gemini でスコアリング
+  let scored = items;
+  let geminiUsed = false;
+  try {
+    scored = await scoreVideos(items);
+    geminiUsed = scored.some(v => v.takaScore !== null && v.takaScore !== undefined);
+  } catch (err) {
+    console.error('Gemini scoring failed:', err);
+    scored = items.map(v => ({ ...v, takaScore: null, takaReason: null }));
+  }
+
+  return res.status(200).json({
+    items: scored,
+    totalQueried: queries.length,
+    totalDeduplicated: deduped.length,
+    geminiUsed,
+  });
 }

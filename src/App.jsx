@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Onboarding from './Onboarding.jsx';
 import Splash from './Splash.jsx';
-import { buildQuery, buildSnsUrls, periodToPublishedAfter } from './searchDict.js';
+import { buildQuery, buildSnsUrls } from './searchDict.js';
 
 const xUrl = (q) => `https://x.com/search?q=${encodeURIComponent(q)}&f=live`;
 const tkUrl = (q) => `https://www.tiktok.com/search?q=${encodeURIComponent(q)}`;
@@ -449,7 +449,7 @@ function SearchTab() {
   const [venueFilter, setVenueFilter] = useState('');
   const [periodFilter, setPeriodFilter] = useState('all');
   const [activePlatforms, setActivePlatforms] = useState(['youtube', 'x', 'tiktok', 'instagram']);
-  const [sortMode, setSortMode] = useState('relevance');
+  const [sortMode, setSortMode] = useState('score');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -468,6 +468,8 @@ function SearchTab() {
   const [archiveNote, setArchiveNote] = useState('');
   const [archiveSaving, setArchiveSaving] = useState(false);
   const [archiveMsg, setArchiveMsg] = useState('');
+  const [contentFilter, setContentFilter] = useState('all');
+  const [searchStats, setSearchStats] = useState(null);
 
   const saveBookmarks = (bms) => {
     setBookmarks(bms);
@@ -507,48 +509,62 @@ function SearchTab() {
   };
 
   const sortResults = (items, mode, q) => {
-    if (mode === 'date') {
+    if (mode === 'score') {
+      return [...items].sort((a, b) => (b.takaScore ?? -1) - (a.takaScore ?? -1));
+    } else if (mode === 'date') {
       return [...items].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
-    } else if (mode === 'relevance') {
+    } else {
       return [...items].sort((a, b) => scoreVideo(b, q) - scoreVideo(a, q));
     }
+  };
+
+  const filterByContent = (items, filter) => {
+    if (filter === 'taka') return items.filter(v => (v.takaScore ?? 0) >= 60 && !v.isOfficial);
+    if (filter === 'official') return items.filter(v => v.isOfficial === true);
     return items;
   };
 
-  const doSearch = async (pageToken = null) => {
+  const doSearch = async () => {
     const filters = {
       member: memberFilter !== 'all' ? memberFilter : null,
       venue: venueFilter || null,
       period: periodFilter,
     };
 
-    const { youtubeQuery, snsQuery, detectedMembers, detectedVenues } = buildQuery(query, filters);
-    const publishedAfter = periodToPublishedAfter(periodFilter);
+    const { snsQuery, detectedMembers, detectedVenues } = buildQuery(query, filters);
     const snsLinks = buildSnsUrls(snsQuery, activePlatforms);
 
     setSnsUrls(snsLinks);
-    setDetectedInfo({ detectedMembers, detectedVenues, youtubeQuery });
+    setDetectedInfo({ detectedMembers, detectedVenues, youtubeQuery: query });
     setLoading(true);
     setError('');
     setSearched(true);
+    setContentFilter('all');
+    setSearchStats(null);
 
     try {
-      const params = new URLSearchParams({ q: youtubeQuery, maxResults: '20' });
-      if (publishedAfter) params.append('publishedAfter', publishedAfter);
-      if (pageToken) params.append('pageToken', pageToken);
-
-      const res = await fetch(`/api/youtube-search?${params.toString()}`);
+      const res = await fetch('/api/youtube-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userInput: query,
+          filters,
+          order: sortMode === 'date' ? 'date' : 'relevance',
+        }),
+      });
       const data = await res.json();
 
       if (!res.ok) throw new Error(data.error || 'Search failed');
 
+      setSearchStats({
+        totalQueried: data.totalQueried || 0,
+        totalDeduplicated: data.totalDeduplicated || 0,
+        geminiUsed: !!data.geminiUsed,
+      });
+
       const sorted = sortResults(data.items || [], sortMode, query);
-      if (pageToken) {
-        setResults(prev => [...prev, ...sorted]);
-      } else {
-        setResults(sorted);
-      }
-      setNextPageToken(data.nextPageToken || null);
+      setResults(sorted);
+      setNextPageToken(null);
     } catch (err) {
       setError('検索に失敗しました。しばらくしてからもう一度お試しください。');
       console.error(err);
@@ -560,7 +576,7 @@ function SearchTab() {
   const handleSearch = () => {
     setResults([]);
     setNextPageToken(null);
-    doSearch(null);
+    doSearch();
   };
 
   const handleKeyDown = (e) => {
@@ -856,28 +872,57 @@ function SearchTab() {
       )}
 
       {searched && !loading && results.length > 0 && (
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 16px', marginBottom: 12,
-        }}>
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{results.length}件</span>
+        <div style={{ padding: '0 16px', marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {filterByContent(results, contentFilter).length}件
+              </span>
+              {searchStats && (
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                  {searchStats.totalQueried}件のクエリを並列実行 → {searchStats.totalDeduplicated}件をAIスコアリング
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              {[{ id: 'score', label: '📸 スコア順' }, { id: 'date', label: '新しい順' }, { id: 'relevance', label: '関連度' }].map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    setSortMode(s.id);
+                    setResults(prev => sortResults([...prev], s.id, query));
+                  }}
+                  style={{
+                    padding: '4px 10px', borderRadius: 20,
+                    border: sortMode === s.id ? '1.5px solid var(--accent)' : '1.5px solid var(--border-subtle)',
+                    background: sortMode === s.id ? 'rgba(224,64,160,0.15)' : 'transparent',
+                    color: sortMode === s.id ? 'var(--accent-light)' : 'var(--text-secondary)',
+                    fontSize: 11, fontWeight: sortMode === s.id ? 700 : 400, cursor: 'pointer',
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            {[{ id: 'relevance', label: '関連度' }, { id: 'date', label: '新しい順' }].map(s => (
+            {[
+              { id: 'all', label: '全て' },
+              { id: 'taka', label: '📸 撮可のみ' },
+              { id: 'official', label: '🏷 公式のみ' },
+            ].map(f => (
               <button
-                key={s.id}
-                onClick={() => {
-                  setSortMode(s.id);
-                  setResults(prev => sortResults([...prev], s.id, query));
-                }}
+                key={f.id}
+                onClick={() => setContentFilter(f.id)}
                 style={{
                   padding: '4px 12px', borderRadius: 20,
-                  border: sortMode === s.id ? '1.5px solid var(--accent)' : '1.5px solid var(--border-subtle)',
-                  background: sortMode === s.id ? 'rgba(224,64,160,0.15)' : 'transparent',
-                  color: sortMode === s.id ? 'var(--accent-light)' : 'var(--text-secondary)',
-                  fontSize: 11, fontWeight: sortMode === s.id ? 700 : 400, cursor: 'pointer',
+                  border: contentFilter === f.id ? '1.5px solid var(--accent)' : '1.5px solid var(--border-subtle)',
+                  background: contentFilter === f.id ? 'rgba(224,64,160,0.15)' : 'transparent',
+                  color: contentFilter === f.id ? 'var(--accent-light)' : 'var(--text-secondary)',
+                  fontSize: 11, fontWeight: contentFilter === f.id ? 700 : 400, cursor: 'pointer',
                 }}
               >
-                {s.label}
+                {f.label}
               </button>
             ))}
           </div>
@@ -892,7 +937,7 @@ function SearchTab() {
             borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px',
           }} />
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-          <p style={{ fontSize: 13 }}>検索中...</p>
+          <p style={{ fontSize: 13 }}>複数のソースを横断検索中…</p>
         </div>
       )}
 
@@ -916,7 +961,24 @@ function SearchTab() {
 
       {!loading && results.length > 0 && (
         <div style={{ padding: '0 16px' }}>
-          {results.map(video => (
+          {filterByContent(results, contentFilter).map(video => {
+            const score = video.takaScore;
+            const isOff = video.isOfficial;
+            let badgeText = null;
+            let badgeBg = 'transparent';
+            let badgeColor = 'transparent';
+            if (isOff) {
+              badgeText = '🏷 公式'; badgeBg = 'rgba(168,85,247,0.18)'; badgeColor = '#a855f7';
+            } else if (score !== null && score !== undefined) {
+              if (score >= 80) {
+                badgeText = '📸 撮可'; badgeBg = 'rgba(16,185,129,0.18)'; badgeColor = '#10b981';
+              } else if (score >= 50) {
+                badgeText = '🎬 関連'; badgeBg = 'rgba(255,255,255,0.1)'; badgeColor = 'rgba(255,255,255,0.5)';
+              } else {
+                badgeText = '🏷 公式'; badgeBg = 'rgba(168,85,247,0.15)'; badgeColor = '#a855f7';
+              }
+            }
+            return (
             <div
               key={video.videoId}
               style={{
@@ -931,9 +993,9 @@ function SearchTab() {
                 rel="noopener noreferrer"
                 style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}
               >
-                {video.thumbnail ? (
+                {video.thumbnailUrl ? (
                   <img
-                    src={video.thumbnail}
+                    src={video.thumbnailUrl}
                     alt={video.title}
                     style={{ width: 120, height: 68, objectFit: 'cover', flexShrink: 0 }}
                   />
@@ -953,8 +1015,14 @@ function SearchTab() {
                   }}>
                     {video.title}
                   </p>
-                  <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                    {video.channelTitle} · {formatDate(video.publishedAt)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', fontSize: 10, color: 'var(--text-secondary)' }}>
+                    <span>{video.channelTitle} · {formatDate(video.publishedAt)}</span>
+                    {badgeText && (
+                      <span style={{
+                        fontSize: 9, padding: '1px 5px', borderRadius: 4,
+                        background: badgeBg, color: badgeColor, fontWeight: 700,
+                      }}>{badgeText}</span>
+                    )}
                   </div>
                 </div>
               </a>
@@ -972,21 +1040,7 @@ function SearchTab() {
                 {isBookmarked(video.videoId) ? '♥' : '♡'}
               </button>
             </div>
-          ))}
-
-          {nextPageToken && (
-            <button
-              onClick={() => doSearch(nextPageToken)}
-              disabled={loading}
-              style={{
-                width: '100%', padding: '14px', borderRadius: 12,
-                border: '1.5px solid var(--border-subtle)', background: 'var(--bg-card)',
-                color: 'var(--text-secondary)', fontSize: 14, cursor: 'pointer', marginBottom: 16,
-              }}
-            >
-              もっと見る
-            </button>
-          )}
+          );})}
         </div>
       )}
 
@@ -1025,7 +1079,7 @@ function ArchiveTab() {
     url: `https://www.youtube.com/watch?v=${b.videoId}`,
     title: b.title,
     authorName: b.channelTitle,
-    thumbnailUrl: b.thumbnail,
+    thumbnailUrl: b.thumbnailUrl || b.thumbnail,
     member: null,
     note: null,
     savedAt: b.savedAt || new Date().toISOString(),

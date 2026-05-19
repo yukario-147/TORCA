@@ -1,9 +1,12 @@
 // src/searchDict.js
 // TORCA 検索クエリ展開辞書
 
+export const OFFICIAL_CHANNEL_IDS = ['UC38ULbpGgiA7t6i-lbLu9VQ'];
+
 export const MEMBER_ALIASES = {
   '島村嬉唄': ['島村嬉唄', 'うたちゃん', 'うちゃたん', 'しまむらうた', 'uta'],
   '嬉唄':     ['島村嬉唄', 'うたちゃん', 'うちゃたん'],
+  'うた':     ['島村嬉唄', 'うたちゃん', 'うちゃたん'],
   'うたちゃん':['島村嬉唄', 'うたちゃん', 'うちゃたん'],
   'うちゃたん':['島村嬉唄', 'うたちゃん', 'うちゃたん'],
   'uta':      ['島村嬉唄', 'うたちゃん'],
@@ -17,6 +20,7 @@ export const MEMBER_ALIASES = {
   'チバゆな': ['チバゆな', 'ゆなちゃん', 'uba_va__3'],
   'ゆな':     ['チバゆな', 'ゆなちゃん'],
   'ゆなちゃん':['チバゆな', 'ゆなちゃん'],
+  'チバ':     ['チバゆな', 'ゆなちゃん'],
 
   '逃げ水あむ':['逃げ水あむ', 'あむちゃん', 'あむち', 'にげみずあむ'],
   'あむ':     ['逃げ水あむ', 'あむちゃん', 'あむち'],
@@ -25,17 +29,26 @@ export const MEMBER_ALIASES = {
 };
 
 export const VENUE_ALIASES = {
-  '幕張':           ['幕張イベントホール', 'Kyururin Heavenly', 'きゅるちゃん幕張'],
-  '幕張イベント':   ['幕張イベントホール', 'Kyururin Heavenly'],
-  'Kアリーナ':      ['Kアリーナ横浜', 'きゅるしてKアリ'],
-  'Kアリ':          ['Kアリーナ横浜', 'きゅるしてKアリ'],
-  'zepp新宿':       ['Zepp Shinjuku', '4周年'],
-  '日比谷':         ['日比谷野外音楽堂', '日比谷野音'],
-  '野音':           ['日比谷野外音楽堂'],
-  'zepp名古屋':     ['Zepp Nagoya', 'Kyururin Wonderland'],
-  '名古屋':         ['Zepp Nagoya'],
-  'かなでびあ':     ['Kanadevia Hall', '東京ドームシティホール'],
-  '東京ドームシティ':['Kanadevia Hall', 'Kyururin Wonderland'],
+  '幕張':              ['幕張イベントホール', 'Kyururin Heavenly', 'きゅるちゃん幕張'],
+  '幕張イベント':      ['幕張イベントホール', 'Kyururin Heavenly'],
+  '幕張イベホ':        ['幕張イベントホール'],
+  'Kアリーナ':         ['Kアリーナ横浜', 'きゅるしてKアリ'],
+  'Kアリ':             ['Kアリーナ横浜', 'きゅるしてKアリ'],
+  '横浜Kアリーナ':     ['Kアリーナ横浜'],
+  'zepp新宿':          ['Zepp Shinjuku', '4周年'],
+  'Zepp新宿':          ['Zepp Shinjuku', '4周年'],
+  'ゼップ新宿':        ['Zepp Shinjuku'],
+  '日比谷':            ['日比谷野外音楽堂', '日比谷野音'],
+  '日比谷野音':        ['日比谷野外音楽堂'],
+  '野音':              ['日比谷野外音楽堂'],
+  'zepp名古屋':        ['Zepp Nagoya', 'Kyururin Wonderland'],
+  'Zepp名古屋':        ['Zepp Nagoya', 'Kyururin Wonderland'],
+  'ゼップ名古屋':      ['Zepp Nagoya'],
+  '名古屋':            ['Zepp Nagoya'],
+  'かなでびあ':        ['Kanadevia Hall', '東京ドームシティホール'],
+  'カナデビアホール':  ['Kanadevia Hall'],
+  '東京ドームシティ':  ['Kanadevia Hall', 'Kyururin Wonderland'],
+  '東京ドームシティホール': ['Kanadevia Hall'],
 };
 
 export const BASE_HASHTAGS = [
@@ -55,6 +68,66 @@ export const VENUE_HASHTAGS = {
   '幕張':    ['きゅるちゃん幕張'],
   'Kアリーナ':['きゅるしてKアリ'],
 };
+
+// ユーザー入力1つから最大5本の検索クエリを生成
+export function expandQueries(userInput, filters = {}) {
+  const text = (userInput || '').trim();
+
+  // メンバー名を正規化
+  let memberName = '';
+  for (const [alias, canonicals] of Object.entries(MEMBER_ALIASES)) {
+    if (text.includes(alias)) {
+      memberName = canonicals[0];
+      break;
+    }
+  }
+  if (!memberName && filters.member && filters.member !== 'all') {
+    memberName = MEMBER_ALIASES[filters.member]?.[0] || filters.member;
+  }
+
+  // 会場名を正規化
+  let venueName = '';
+  for (const [alias, venues] of Object.entries(VENUE_ALIASES)) {
+    if (text.includes(alias)) {
+      venueName = venues[0];
+      break;
+    }
+  }
+  if (!venueName && filters.venue) {
+    venueName = VENUE_ALIASES[filters.venue]?.[0] || filters.venue;
+  }
+
+  if (!text && !memberName && !venueName) {
+    return ['きゅるりんってしてみて 撮可 ライブ', 'きゅるして ファン 動画 撮可'];
+  }
+
+  const base = text || [memberName, venueName].filter(Boolean).join(' ');
+  const set = new Set();
+
+  // A: 入力そのまま + 「きゅるりんってしてみて」
+  set.add(`${base} きゅるりんってしてみて`);
+
+  // B: 入力 + 「撮可」+「きゅるして」
+  set.add(`${base} 撮可 きゅるして`);
+
+  // C: 正規化したメンバー+会場 + 「きゅるして」
+  const canonical = [memberName, venueName].filter(Boolean).join(' ');
+  if (canonical) {
+    set.add(`${canonical} きゅるして`);
+  }
+
+  // D: 入力 + 紐づくメンバー名 + 「ライブ」
+  if (memberName && memberName !== base) {
+    set.add(`${base} ${memberName} ライブ`);
+  } else {
+    set.add(`${base} きゅるして ライブ`);
+  }
+
+  // E: 入力 + 「きゅるして ファン 動画」
+  set.add(`${base} きゅるして ファン 動画`);
+
+  return [...set].slice(0, 5);
+}
 
 export function buildQuery(input, filters = {}) {
   const text = input.trim();
