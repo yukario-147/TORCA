@@ -586,11 +586,6 @@ function SearchTab() {
   };
 
   const handleSearch = () => {
-    if (!query.trim() && memberFilter === 'all' && !venueFilter) {
-      setError('キーワード、メンバー、会場のいずれかを指定してください。');
-      setSearched(false);
-      return;
-    }
     setResults([]);
     setNextPageToken(null);
     doSearch();
@@ -657,168 +652,172 @@ function SearchTab() {
     setTimeout(() => setArchiveMsg(''), 3000);
   };
 
-  const visibleResults = filterByContent(filterByMember(results, memberFilter), contentFilter);
-  const selectedMemberLabel = MEMBERS_FILTER.find(m => m.id === memberFilter)?.label || '全員';
-  const selectedVenueLabel = VENUES_FILTER.find(v => v.id === venueFilter)?.label || '会場指定なし';
-  const canSearch = query.trim() || memberFilter !== 'all' || venueFilter;
-  const fieldStyle = {
-    width: '100%', padding: '10px 12px', borderRadius: 8,
-    border: '1px solid var(--border-subtle)', background: '#101018',
-    color: 'var(--text-primary)', fontSize: 13, outline: 'none',
-  };
-  const labelStyle = {
-    display: 'block', fontSize: 11, color: 'var(--text-muted)',
-    fontWeight: 700, marginBottom: 6, letterSpacing: '0.03em',
-  };
-
   return (
     <div style={{ padding: '0 0 80px 0' }}>
-      <div style={{ padding: '18px 16px 0' }}>
-        <div style={{ marginBottom: 12 }}>
-          <h2 style={{ fontSize: 20, fontWeight: 850, margin: '0 0 4px', color: 'var(--text-primary)' }}>
-            撮可検索
-          </h2>
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>
-            YouTube検索とSNS横断リンクを、同じ条件からまとめて作成します。
-          </p>
+      <div style={{ padding: '20px 16px 0' }}>
+        <h2 style={{
+          fontSize: 20, fontWeight: 800, margin: '0 0 4px',
+          background: 'linear-gradient(120deg, var(--accent-light), var(--accent2))',
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+        }}>
+          撮可を探す
+        </h2>
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 16px' }}>
+          YouTube検索 ＋ X / TikTok / Instagram への導線
+        </p>
+
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="例：うたちゃんの幕張 / あむちゃんソロ / やねぴのダンスシーン"
+            style={{
+              width: '100%', padding: '14px 52px 14px 16px', borderRadius: 12,
+              border: '1.5px solid var(--border-subtle)', background: 'var(--bg-card)',
+              color: 'var(--text-primary)', fontSize: 15, outline: 'none', boxSizing: 'border-box',
+              transition: 'border-color 0.2s',
+            }}
+            onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+            onBlur={e => e.target.style.borderColor = 'var(--border-subtle)'}
+          />
+          <button
+            onClick={handleSearch}
+            style={{
+              position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+              background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+              border: 'none', borderRadius: 8, padding: '8px 14px',
+              color: '#fff', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+            }}
+          >
+            検索
+          </button>
         </div>
 
-        <section style={{
-          background: '#12121b', border: '1px solid var(--border-subtle)',
-          borderRadius: 8, padding: 12, marginBottom: 12,
-        }}>
-          <label style={labelStyle}>キーワード</label>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 8, alignItems: 'stretch', marginBottom: 12 }}>
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="例：うたちゃん 幕張 / あむちゃん ソロ / やねぴ ダンス"
-              style={{ ...fieldStyle, minWidth: 0 }}
-              onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-              onBlur={e => e.target.style.borderColor = 'var(--border-subtle)'}
-            />
-            <button
-              onClick={handleSearch}
-              disabled={loading || !canSearch}
-              style={{
-                border: '1px solid var(--accent)', borderRadius: 8, padding: '0 18px',
-                background: canSearch ? 'var(--accent)' : 'rgba(255,255,255,0.06)',
-                color: canSearch ? '#fff' : 'var(--text-muted)', fontWeight: 800,
-                fontSize: 13, cursor: canSearch && !loading ? 'pointer' : 'not-allowed',
-                minWidth: 76,
-              }}
-            >
-              {loading ? '検索中' : '検索'}
-            </button>
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>メンバー</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {MEMBERS_FILTER.map(m => (
+              <button
+                key={m.id}
+                onClick={() => setMemberFilter(m.id)}
+                style={{
+                  padding: '5px 12px', borderRadius: 20,
+                  border: memberFilter === m.id ? `1.5px solid ${m.color || 'var(--accent)'}` : '1.5px solid var(--border-subtle)',
+                  background: memberFilter === m.id ? `${m.color || 'var(--accent)'}22` : 'var(--bg-card)',
+                  color: memberFilter === m.id ? (m.color || 'var(--accent)') : 'var(--text-secondary)',
+                  fontSize: 12, fontWeight: memberFilter === m.id ? 700 : 400,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+              >
+                {m.emoji} {m.label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 12 }}>
-            <div>
-              <label style={labelStyle}>会場</label>
-              <select value={venueFilter} onChange={e => setVenueFilter(e.target.value)} style={fieldStyle}>
-                {VENUES_FILTER.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>期間</label>
-              <select value={periodFilter} onChange={e => setPeriodFilter(e.target.value)} style={fieldStyle}>
-                {PERIODS_FILTER.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-              </select>
-            </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <select
+            value={venueFilter}
+            onChange={e => setVenueFilter(e.target.value)}
+            style={{
+              padding: '7px 10px', borderRadius: 8, border: '1.5px solid var(--border-subtle)',
+              background: 'var(--bg-card)', color: 'var(--text-secondary)',
+              fontSize: 12, cursor: 'pointer', flex: 1, minWidth: 140,
+            }}
+          >
+            {VENUES_FILTER.map(v => (
+              <option key={v.id} value={v.id}>{v.label}</option>
+            ))}
+          </select>
+          <select
+            value={periodFilter}
+            onChange={e => setPeriodFilter(e.target.value)}
+            style={{
+              padding: '7px 10px', borderRadius: 8, border: '1.5px solid var(--border-subtle)',
+              background: 'var(--bg-card)', color: 'var(--text-secondary)',
+              fontSize: 12, cursor: 'pointer', flex: 1, minWidth: 120,
+            }}
+          >
+            {PERIODS_FILTER.map(p => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>検索先SNS</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {SNS_PLATFORMS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => togglePlatform(p.id)}
+                style={{
+                  padding: '5px 12px', borderRadius: 20,
+                  border: activePlatforms.includes(p.id) ? `1.5px solid ${p.color}` : '1.5px solid var(--border-subtle)',
+                  background: activePlatforms.includes(p.id) ? `${p.color}22` : 'var(--bg-card)',
+                  color: activePlatforms.includes(p.id) ? p.color : 'var(--text-secondary)',
+                  fontSize: 12, fontWeight: activePlatforms.includes(p.id) ? 700 : 400,
+                  cursor: 'pointer', transition: 'all 0.2s',
+                }}
+              >
+                {p.icon} {p.label}
+              </button>
+            ))}
           </div>
+        </div>
 
-          <div style={{ marginBottom: 12 }}>
-            <div style={labelStyle}>メンバー</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(92px, 1fr))', gap: 6 }}>
-              {MEMBERS_FILTER.map(m => {
-                const selected = memberFilter === m.id;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => setMemberFilter(m.id)}
-                    style={{
-                      minHeight: 34, padding: '6px 8px', borderRadius: 7,
-                      border: selected ? `1px solid ${m.color || 'var(--accent)'}` : '1px solid var(--border-subtle)',
-                      background: selected ? `${m.color || 'var(--accent)'}1f` : '#0f0f17',
-                      color: selected ? (m.color || 'var(--accent-light)') : 'var(--text-secondary)',
-                      fontSize: 12, fontWeight: selected ? 800 : 600, cursor: 'pointer',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {m.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div style={labelStyle}>外部検索リンク</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 6 }}>
-              {SNS_PLATFORMS.map(p => {
-                const active = activePlatforms.includes(p.id);
-                return (
-                  <button
-                    key={p.id}
-                    onClick={() => togglePlatform(p.id)}
-                    style={{
-                      minHeight: 34, padding: '6px 8px', borderRadius: 7,
-                      border: active ? `1px solid ${p.color}` : '1px solid var(--border-subtle)',
-                      background: active ? `${p.color}18` : '#0f0f17',
-                      color: active ? p.color : 'var(--text-muted)',
-                      fontSize: 12, fontWeight: active ? 800 : 600, cursor: 'pointer',
-                    }}
-                  >
-                    {p.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        <section style={{
-          background: '#101018', border: '1px solid var(--border-subtle)',
-          borderRadius: 8, padding: 12, marginBottom: 14,
-        }}>
+        {/* URL アーカイブ */}
+        <div style={{ marginBottom: 8 }}>
           <button
             onClick={() => setArchiveOpen(o => !o)}
             style={{
-              width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              display: 'flex', alignItems: 'center', gap: 6,
               background: 'transparent', border: 'none', cursor: 'pointer',
-              color: 'var(--text-primary)', fontSize: 12, padding: 0, fontWeight: 800,
+              color: 'var(--text-secondary)', fontSize: 11, padding: 0, fontWeight: 600,
             }}
           >
-            <span>URLを手動保存</span>
-            <span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>{archiveOpen ? '閉じる' : '開く'}</span>
+            <span style={{ transform: archiveOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
+            X / TikTok / Instagram の URL をアーカイブ
           </button>
           {archiveOpen && (
-            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 8 }}>
+            <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                 <input
                   type="url"
                   value={archiveUrl}
                   onChange={e => setArchiveUrl(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && saveToArchive()}
-                  placeholder="https://x.com/... / tiktok.com/... / instagram.com/..."
-                  style={fieldStyle}
+                  placeholder="https://x.com/... または tiktok.com/..."
+                  style={{
+                    flex: 1, padding: '9px 12px', borderRadius: 8,
+                    border: '1.5px solid var(--border-subtle)', background: '#0c0c12',
+                    color: 'var(--text-primary)', fontSize: 13, outline: 'none',
+                  }}
                 />
                 <button
                   onClick={saveToArchive}
                   disabled={archiveSaving}
                   style={{
-                    padding: '0 14px', borderRadius: 8, border: '1px solid var(--border-subtle)',
-                    background: '#1a1a27', color: 'var(--text-primary)', fontWeight: 800,
-                    fontSize: 12, cursor: archiveSaving ? 'wait' : 'pointer',
+                    padding: '9px 14px', borderRadius: 8, border: 'none',
+                    background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+                    color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {archiveSaving ? '保存中' : '保存'}
+                  {archiveSaving ? '...' : '保存'}
                 </button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
-                <select value={archiveMember} onChange={e => setArchiveMember(e.target.value)} style={fieldStyle}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <select
+                  value={archiveMember}
+                  onChange={e => setArchiveMember(e.target.value)}
+                  style={{
+                    padding: '7px 10px', borderRadius: 8, border: '1.5px solid var(--border-subtle)',
+                    background: '#0c0c12', color: 'var(--text-secondary)', fontSize: 12, cursor: 'pointer', flex: 1,
+                  }}
+                >
                   <option value="">メンバー（任意）</option>
                   {MEMBERS_FILTER.filter(m => m.id !== 'all').map(m => (
                     <option key={m.id} value={m.id}>{m.label}</option>
@@ -829,13 +828,17 @@ function SearchTab() {
                   value={archiveNote}
                   onChange={e => setArchiveNote(e.target.value)}
                   placeholder="メモ（任意）"
-                  style={fieldStyle}
+                  style={{
+                    flex: 1, padding: '7px 10px', borderRadius: 8,
+                    border: '1.5px solid var(--border-subtle)', background: '#0c0c12',
+                    color: 'var(--text-primary)', fontSize: 12, outline: 'none',
+                  }}
                 />
               </div>
               {archiveMsg && (
                 <div style={{
-                  fontSize: 12, padding: '7px 9px', borderRadius: 7,
-                  background: archiveMsg.includes('しました') ? 'rgba(16,185,129,0.12)' : 'rgba(231,76,60,0.12)',
+                  fontSize: 12, padding: '6px 10px', borderRadius: 8, marginTop: 4,
+                  background: archiveMsg.includes('しました') ? 'rgba(16,185,129,0.15)' : 'rgba(231,76,60,0.15)',
                   color: archiveMsg.includes('しました') ? '#34d399' : '#e74c3c',
                 }}>
                   {archiveMsg}
@@ -843,29 +846,23 @@ function SearchTab() {
               )}
             </div>
           )}
-        </section>
+        </div>
       </div>
 
       {searched && Object.keys(snsUrls).length > 0 && (
         <div style={{
-          margin: '0 16px 12px', padding: '12px', borderRadius: 8,
-          background: '#12121b', border: '1px solid var(--border-subtle)',
+          margin: '0 16px 16px', padding: '12px 14px', borderRadius: 10,
+          background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline', marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 800 }}>外部サイトで確認</div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'right' }}>
-              {selectedMemberLabel} / {selectedVenueLabel}
-            </div>
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 10 }}>
-            同じ条件でSNS側の最新投稿を開きます。
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>
+            各SNSで同じクエリを検索する
             {detectedInfo?.detectedMembers?.length > 0 && (
               <span style={{ marginLeft: 8, color: 'var(--accent-light)' }}>
-                検出: {detectedInfo.detectedMembers[0]}
+                📍 {detectedInfo.detectedMembers[0]}
               </span>
             )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {SNS_PLATFORMS.filter(p => snsUrls[p.id]).map(p => (
               <a
                 key={p.id}
@@ -873,13 +870,13 @@ function SearchTab() {
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                  minHeight: 34, padding: '6px 10px', borderRadius: 7,
-                  background: '#0f0f17', border: `1px solid ${p.color}66`,
-                  color: p.color, fontSize: 12, fontWeight: 800, textDecoration: 'none',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '6px 14px', borderRadius: 20,
+                  background: `${p.color}22`, border: `1px solid ${p.color}44`,
+                  color: p.color, fontSize: 12, fontWeight: 600, textDecoration: 'none',
                 }}
               >
-                {p.label}で開く
+                {p.icon} {p.label}で開く
               </a>
             ))}
           </div>
@@ -888,23 +885,20 @@ function SearchTab() {
 
       {searched && !loading && results.length > 0 && (
         <div style={{ padding: '0 16px', marginBottom: 10 }}>
-          <div style={{
-            background: '#12121b', border: '1px solid var(--border-subtle)',
-            borderRadius: 8, padding: 10,
-          }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
             <div>
-              <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 850 }}>
-                検索結果 {visibleResults.length}件
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                {filterByContent(filterByMember(results, memberFilter), contentFilter).length}件
+                {memberFilter !== 'all' && <span style={{ marginLeft: 4, color: 'var(--accent-light)', fontSize: 11 }}>({memberFilter})</span>}
               </span>
               {searchStats && (
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>
-                  {searchStats.totalQueried}クエリ / 重複除外後 {searchStats.totalDeduplicated}件
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                  {searchStats.totalQueried}件のクエリを並列実行 → {searchStats.totalDeduplicated}件をAIスコアリング
                 </div>
               )}
             </div>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {[{ id: 'score', label: '撮可順' }, { id: 'date', label: '新しい順' }, { id: 'relevance', label: '関連度' }].map(s => (
+              {[{ id: 'score', label: '📸 スコア順' }, { id: 'date', label: '新しい順' }, { id: 'relevance', label: '関連度' }].map(s => (
                 <button
                   key={s.id}
                   onClick={() => {
@@ -912,11 +906,11 @@ function SearchTab() {
                     setResults(prev => sortResults([...prev], s.id, query));
                   }}
                   style={{
-                    padding: '5px 9px', borderRadius: 6,
-                    border: sortMode === s.id ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                    background: sortMode === s.id ? 'rgba(224,64,160,0.13)' : '#0f0f17',
+                    padding: '4px 10px', borderRadius: 20,
+                    border: sortMode === s.id ? '1.5px solid var(--accent)' : '1.5px solid var(--border-subtle)',
+                    background: sortMode === s.id ? 'rgba(224,64,160,0.15)' : 'transparent',
                     color: sortMode === s.id ? 'var(--accent-light)' : 'var(--text-secondary)',
-                    fontSize: 11, fontWeight: sortMode === s.id ? 800 : 600, cursor: 'pointer',
+                    fontSize: 11, fontWeight: sortMode === s.id ? 700 : 400, cursor: 'pointer',
                   }}
                 >
                   {s.label}
@@ -924,27 +918,26 @@ function SearchTab() {
               ))}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 6 }}>
             {[
               { id: 'all', label: '全て' },
-              { id: 'taka', label: '撮可候補' },
-              { id: 'official', label: '公式' },
+              { id: 'taka', label: '📸 撮可のみ' },
+              { id: 'official', label: '🏷 公式のみ' },
             ].map(f => (
               <button
                 key={f.id}
                 onClick={() => setContentFilter(f.id)}
                 style={{
-                  padding: '5px 10px', borderRadius: 6,
-                  border: contentFilter === f.id ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                  background: contentFilter === f.id ? 'rgba(224,64,160,0.13)' : '#0f0f17',
+                  padding: '4px 12px', borderRadius: 20,
+                  border: contentFilter === f.id ? '1.5px solid var(--accent)' : '1.5px solid var(--border-subtle)',
+                  background: contentFilter === f.id ? 'rgba(224,64,160,0.15)' : 'transparent',
                   color: contentFilter === f.id ? 'var(--accent-light)' : 'var(--text-secondary)',
-                  fontSize: 11, fontWeight: contentFilter === f.id ? 800 : 600, cursor: 'pointer',
+                  fontSize: 11, fontWeight: contentFilter === f.id ? 700 : 400, cursor: 'pointer',
                 }}
               >
                 {f.label}
               </button>
             ))}
-          </div>
           </div>
         </div>
       )}
@@ -972,50 +965,30 @@ function SearchTab() {
       )}
 
       {!searched && !loading && (
-        <div style={{
-          margin: '0 16px', padding: '18px 14px', borderRadius: 8,
-          background: '#101018', border: '1px solid var(--border-subtle)',
-          color: 'var(--text-secondary)',
-        }}>
-          <p style={{ fontSize: 13, margin: '0 0 8px', color: 'var(--text-primary)', fontWeight: 800 }}>検索の始め方</p>
-          <p style={{ fontSize: 12, lineHeight: 1.7, margin: 0 }}>
-            キーワードなしでもメンバーや会場だけで検索できます。検索後はYouTube結果を保存しつつ、同じ条件でX、TikTok、Instagramも開けます。
-          </p>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-            {['あむちゃん 幕張', 'やねぴ ソロ', 'うたちゃん 日比谷'].map(sample => (
-              <button
-                key={sample}
-                onClick={() => setQuery(sample)}
-                style={{
-                  padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border-subtle)',
-                  background: '#151521', color: 'var(--text-secondary)', fontSize: 11,
-                  fontWeight: 700, cursor: 'pointer',
-                }}
-              >
-                {sample}
-              </button>
-            ))}
-          </div>
+        <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🎬</div>
+          <p style={{ fontSize: 14, margin: 0 }}>メンバー名やニックネームで検索してみよう</p>
+          <p style={{ fontSize: 12, marginTop: 6 }}>例：「あむちゃん 幕張」「やねぴのソロ」</p>
         </div>
       )}
 
       {!loading && results.length > 0 && (
         <div style={{ padding: '0 16px' }}>
-          {visibleResults.map(video => {
+          {filterByContent(filterByMember(results, memberFilter), contentFilter).map(video => {
             const score = video.takaScore;
             const isOff = video.isOfficial;
             let badgeText = null;
             let badgeBg = 'transparent';
             let badgeColor = 'transparent';
             if (isOff) {
-              badgeText = '公式'; badgeBg = 'rgba(168,85,247,0.16)'; badgeColor = '#c084fc';
+              badgeText = '🏷 公式'; badgeBg = 'rgba(168,85,247,0.18)'; badgeColor = '#a855f7';
             } else if (score !== null && score !== undefined) {
               if (score >= 80) {
-                badgeText = `撮可 ${score}`; badgeBg = 'rgba(16,185,129,0.14)'; badgeColor = '#34d399';
+                badgeText = '📸 撮可'; badgeBg = 'rgba(16,185,129,0.18)'; badgeColor = '#10b981';
               } else if (score >= 50) {
-                badgeText = `関連 ${score}`; badgeBg = 'rgba(255,255,255,0.08)'; badgeColor = 'rgba(255,255,255,0.62)';
+                badgeText = '🎬 関連'; badgeBg = 'rgba(255,255,255,0.1)'; badgeColor = 'rgba(255,255,255,0.5)';
               } else {
-                badgeText = `低 ${score}`; badgeBg = 'rgba(255,255,255,0.06)'; badgeColor = 'var(--text-muted)';
+                badgeText = '🏷 公式'; badgeBg = 'rgba(168,85,247,0.15)'; badgeColor = '#a855f7';
               }
             }
             return (
@@ -1023,7 +996,7 @@ function SearchTab() {
               key={video.videoId}
               style={{
                 display: 'flex', alignItems: 'stretch', position: 'relative',
-                background: '#12121b', borderRadius: 8,
+                background: 'var(--bg-card)', borderRadius: 10,
                 border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
               }}
             >
@@ -1037,30 +1010,29 @@ function SearchTab() {
                   <img
                     src={video.thumbnailUrl}
                     alt={video.title}
-                    style={{ width: 124, height: 74, objectFit: 'cover', flexShrink: 0 }}
+                    style={{ width: 120, height: 68, objectFit: 'cover', flexShrink: 0 }}
                   />
                 ) : (
                   <div style={{
-                    width: 124, height: 74, flexShrink: 0, background: '#1a1828',
+                    width: 120, height: 68, flexShrink: 0, background: '#1a1828',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'var(--text-secondary)', fontSize: 20,
                   }}>▶</div>
                 )}
-                <div style={{ flex: 1, minWidth: 0, padding: '9px 42px 9px 10px' }}>
+                <div style={{ flex: 1, minWidth: 0, padding: '8px 36px 8px 10px' }}>
                   <p style={{
-                    fontSize: 12, fontWeight: 750, margin: '0 0 5px', lineHeight: 1.45,
+                    fontSize: 12, fontWeight: 600, margin: '0 0 4px', lineHeight: 1.4,
                     color: 'var(--text-primary)',
                     display: '-webkit-box', WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical', overflow: 'hidden',
                   }}>
                     {video.title}
                   </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 10, color: 'var(--text-secondary)' }}>
-                    <span>{video.channelTitle}</span>
-                    <span>{formatDate(video.publishedAt)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', fontSize: 10, color: 'var(--text-secondary)' }}>
+                    <span>{video.channelTitle} · {formatDate(video.publishedAt)}</span>
                     {badgeText && (
                       <span style={{
-                        fontSize: 9, padding: '2px 5px', borderRadius: 4,
+                        fontSize: 9, padding: '1px 5px', borderRadius: 4,
                         background: badgeBg, color: badgeColor, fontWeight: 700,
                       }}>{badgeText}</span>
                     )}
@@ -1070,10 +1042,9 @@ function SearchTab() {
               <button
                 onClick={() => toggleBookmark(video)}
                 style={{
-                  position: 'absolute', top: 7, right: 7,
-                  background: isBookmarked(video.videoId) ? 'rgba(224,64,160,0.14)' : '#0f0f17',
-                  border: '1px solid var(--border-subtle)', borderRadius: 6, cursor: 'pointer',
-                  fontSize: 14, padding: '3px 6px',
+                  position: 'absolute', top: 6, right: 6,
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  fontSize: 16, padding: '2px 4px',
                   color: isBookmarked(video.videoId) ? 'var(--accent)' : 'var(--text-secondary)',
                   transition: 'color 0.2s',
                 }}
@@ -1095,8 +1066,9 @@ function SearchTab() {
       )}
 
       {searched && !loading && results.length > 0 &&
-        visibleResults.length === 0 && (
+        filterByContent(filterByMember(results, memberFilter), contentFilter).length === 0 && (
         <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary)' }}>
+          <div style={{ fontSize: 32, marginBottom: 10 }}>🔎</div>
           <p style={{ fontSize: 13, margin: 0 }}>
             {memberFilter !== 'all'
               ? `${memberFilter}の動画が見つかりませんでした`
