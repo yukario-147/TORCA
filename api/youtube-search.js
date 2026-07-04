@@ -33,10 +33,8 @@ export default async function handler(req, res) {
 
   const { userInput = '', filters = {}, order = 'relevance' } = req.body || {};
 
-  if (!userInput && !filters.member && !filters.venue) {
-    return res.status(400).json({ error: 'userInput is required' });
-  }
-
+  // userInput・filters がすべて空の場合は expandQueries が
+  // 「きゅるして 撮可」系のデフォルトクエリを返す（ホームのフィード取得に使用）
   const queries = expandQueries(userInput, filters);
   const publishedAfter = periodToPublishedAfter(filters.period);
 
@@ -145,7 +143,7 @@ export default async function handler(req, res) {
   const relevant = items.filter(isKyurushiteRelated);
 
   // Gemini でスコアリング
-  let scored = relevant;
+  let scored;
   let geminiUsed = false;
   try {
     scored = await scoreVideos(relevant);
