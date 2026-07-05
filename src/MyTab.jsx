@@ -6,6 +6,8 @@ import { D, DEFAULT_ACCENT, applyAccent } from "./theme.js";
 import { KYURUSHITE, findMember } from "./data.js";
 import { VideoCard } from "./components.jsx";
 import { MemberFeed } from "./pages.jsx";
+import { loadJSON, KEYS, oshiDays } from "./storage.js";
+import { nextEvent, daysUntil } from "./events.js";
 
 export default function MyTab({ profile, videos, onSelectVideo, onSelectMember, onSave, saved, onChangePush }) {
   const myMember = profile.memberId ? findMember("kyurushite", profile.memberId) : null;
@@ -19,6 +21,18 @@ export default function MyTab({ profile, videos, onSelectVideo, onSelectMember, 
     ? videos.filter(v => v.artistId === "kyurushite" && v.focusMemberId === myMember.id)
     : [];
   const groupVideos = videos.filter(v => v.artistId === "kyurushite");
+
+  // 推し活ダッシュボード
+  const days = myMember ? oshiDays(myMember.id) : null;
+  const bookmarkCount = loadJSON(KEYS.bookmarks, []).length;
+  const archiveCount = loadJSON(KEYS.archive, []).length;
+  const next = nextEvent();
+  const stats = [
+    days != null && { icon: "💗", value: `${days}日`, label: "推し歴" },
+    { icon: "🔖", value: bookmarkCount, label: "ブックマーク" },
+    { icon: "📼", value: archiveCount, label: "アーカイブ" },
+    next && { icon: "🎪", value: daysUntil(next.date) === 0 ? "本日" : `${daysUntil(next.date)}日`, label: "次のライブ" },
+  ].filter(Boolean);
 
   return (
     <div>
@@ -37,6 +51,17 @@ export default function MyTab({ profile, videos, onSelectVideo, onSelectMember, 
             </div>
           </div>
         </div>
+      </div>
+
+      {/* 推し活ダッシュボード */}
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${stats.length}, 1fr)`, gap: 8, marginBottom: 18 }}>
+        {stats.map(s => (
+          <div key={s.label} style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 12, padding: "12px 6px", textAlign: "center" }}>
+            <div style={{ fontSize: 14, marginBottom: 3 }}>{s.icon}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, color: D.text }}>{s.value}</div>
+            <div style={{ fontSize: 8, color: D.textSub, marginTop: 2, fontWeight: 600 }}>{s.label}</div>
+          </div>
+        ))}
       </div>
 
       {myMember && (
@@ -59,6 +84,15 @@ export default function MyTab({ profile, videos, onSelectVideo, onSelectMember, 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
         {groupVideos.map(v => <VideoCard key={v.id} v={v} onSelect={onSelectVideo} onSave={onSave} isSaved={saved.includes(v.id)} />)}
       </div>
+
+      {videos.filter(v => saved.includes(v.id)).length > 0 && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>♥ 保存したクリップ <span style={{ fontSize: 10, color: D.textMuted, fontWeight: 400 }}>{videos.filter(v => saved.includes(v.id)).length}件</span></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+            {videos.filter(v => saved.includes(v.id)).map(v => <VideoCard key={v.id} v={v} onSelect={onSelectVideo} onSave={onSave} isSaved={true} />)}
+          </div>
+        </>
+      )}
 
       <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>💗 メンバーで絞り込む</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>

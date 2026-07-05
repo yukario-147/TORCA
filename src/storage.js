@@ -11,6 +11,12 @@ export const KEYS = {
   member: 'torca_member',
   accent: 'torca_accent',
   onboarding: 'torca_onboarding_done',
+  settings: 'torca_settings',
+  searchHistory: 'torca_search_history',
+  pinnedSearches: 'torca_pinned_searches',
+  oshiSince: 'torca_oshi_since',
+  prevVisit: 'torca_prev_visit',
+  lastVisit: 'torca_last_visit',
 };
 
 export function loadJSON(key, fallback) {
@@ -118,4 +124,149 @@ export function mergeShareData({ bookmarks: inBookmarks, archive: inArchive }) {
   if (newArchive.length > 0) saveJSON(KEYS.archive, [...newArchive, ...archive]);
 
   return newBookmarks.length + newArchive.length;
+}
+
+// =====================
+// アプリ設定
+// =====================
+const DEFAULT_SETTINGS = { aiDefault: true };
+
+export function getSetting(key) {
+  const s = loadJSON(KEYS.settings, {});
+  return key in s ? s[key] : DEFAULT_SETTINGS[key];
+}
+
+export function setSetting(key, value) {
+  const s = loadJSON(KEYS.settings, {});
+  saveJSON(KEYS.settings, { ...s, [key]: value });
+}
+
+// =====================
+// 検索履歴・ピン留め検索
+// =====================
+const HISTORY_LIMIT = 10;
+
+export function getSearchHistory() {
+  return loadJSON(KEYS.searchHistory, []);
+}
+
+export function addSearchHistory(query) {
+  const q = (query || '').trim();
+  if (!q) return;
+  const next = [q, ...getSearchHistory().filter(h => h !== q)].slice(0, HISTORY_LIMIT);
+  saveJSON(KEYS.searchHistory, next);
+}
+
+export function clearSearchHistory() {
+  saveJSON(KEYS.searchHistory, []);
+}
+
+export function getPinnedSearches() {
+  return loadJSON(KEYS.pinnedSearches, []);
+}
+
+export function togglePinnedSearch(query) {
+  const q = (query || '').trim();
+  if (!q) return getPinnedSearches();
+  const cur = getPinnedSearches();
+  const next = cur.includes(q) ? cur.filter(p => p !== q) : [...cur, q].slice(0, 8);
+  saveJSON(KEYS.pinnedSearches, next);
+  return next;
+}
+
+// =====================
+// 前回訪問（NEW バッジ用）
+// セッション初回に「前回の最終訪問時刻」を確定し、以降そのセッション中は固定
+// =====================
+export function getPrevVisit() {
+  try {
+    if (!sessionStorage.getItem('torca_session_started')) {
+      sessionStorage.setItem('torca_session_started', '1');
+      const last = localStorage.getItem(KEYS.lastVisit);
+      if (last) localStorage.setItem(KEYS.prevVisit, last);
+      localStorage.setItem(KEYS.lastVisit, new Date().toISOString());
+    }
+    return localStorage.getItem(KEYS.prevVisit) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function isNewSince(publishedAt) {
+  const prev = getPrevVisit();
+  return !!(prev && publishedAt && publishedAt > prev);
+}
+
+// =====================
+// 推し歴（メンバーごとに最初に推した日を記録）
+// =====================
+export function recordOshiSince(memberId) {
+  if (!memberId) return;
+  const map = loadJSON(KEYS.oshiSince, {});
+  if (!map[memberId]) {
+    saveJSON(KEYS.oshiSince, { ...map, [memberId]: new Date().toISOString() });
+  }
+}
+
+export function oshiDays(memberId) {
+  const map = loadJSON(KEYS.oshiSince, {});
+  if (!memberId || !map[memberId]) return null;
+  return Math.max(1, Math.floor((Date.now() - new Date(map[memberId]).getTime()) / 86400000) + 1);
+}
+
+// =====================
+// バックアップ（機種変更・ブラウザ移行用）
+// torca_* のユーザーデータを JSON 化。フィードキャッシュは含めない
+// =====================
+const BACKUP_KEYS = [
+  KEYS.bookmarks, KEYS.archive, KEYS.saved, KEYS.member, KEYS.accent,
+  KEYS.onboarding, KEYS.settings, KEYS.searchHistory, KEYS.pinnedSearches, KEYS.oshiSince,
+];
+
+export function exportBackup() {
+  const data = {};
+  for (const key of BACKUP_KEYS) {
+    const v = localStorage.getItem(key);
+    if (v !== null) data[key] = v;
+  }
+  return JSON.stringify({ app: 'TORCA', v: 1, exportedAt: new Date().toISOString(), data }, null, 2);
+}
+
+export function importBackup(json) {
+  let payload;
+  try {
+    payload = JSON.parse(json);
+  } catch {
+    throw new Error('バックアップファイルを読み取れませんでした');
+  }
+  if (payload?.app !== 'TORCA' || !payload.data) {
+    throw new Error('TORCAのバックアップファイルではありません');
+  }
+  let count = 0;
+  for (const [key, value] of Object.entries(payload.data)) {
+    if (BACKUP_KEYS.includes(key) && typeof value === 'string') {
+      localStorage.setItem(key, value);
+      count++;
+    }
+  }
+  return count;
+}
+
+export function clearFeedCache() {
+  const removed = [];
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('torca_feed_')) {
+      removed.push(key);
+      localStorage.removeItem(key);
+    }
+  }
+  return removed.length;
+}
+
+export function clearAllData() {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('torca_')) localStorage.removeItem(key);
+  }
 }

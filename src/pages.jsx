@@ -74,10 +74,11 @@ export function MemberFeed({ member, limit = 5 }) {
       最新クリップを取得できませんでした。<br />検索タブから「{member.name}」で探してみてください。
     </div>
   );
+  const visible = items.slice(0, limit);
   return (
     <div style={{ marginBottom: 14 }}>
-      {items.slice(0, limit).map(v => (
-        <ClipRow key={v.videoId} video={v} bookmarked={has(v.videoId)} onToggleBookmark={toggle} />
+      {visible.map((v, i) => (
+        <ClipRow key={v.videoId} video={v} queue={visible} queueIndex={i} bookmarked={has(v.videoId)} onToggleBookmark={toggle} />
       ))}
     </div>
   );

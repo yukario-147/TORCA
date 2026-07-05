@@ -7,14 +7,17 @@ import Onboarding from './Onboarding.jsx';
 import Splash from './Splash.jsx';
 import { INITIAL_VIDEOS, findArtist, findMember } from './data.js';
 import { D, DEFAULT_ACCENT, DEFAULT_ACCENT_RGB, ACCENT_RGB_MAP, applyAccent, useBreakpoint } from './theme.js';
-import { Footer, VideoCard } from './components.jsx';
+import { Footer } from './components.jsx';
 import { ArtistPage, MemberPage, DetailView } from './pages.jsx';
 import HomeTab from './HomeTab.jsx';
 import MyTab from './MyTab.jsx';
 import SearchTab from './SearchTab.jsx';
 import ArchiveTab from './ArchiveTab.jsx';
+import LiveTab from './LiveTab.jsx';
+import SettingsTab from './SettingsTab.jsx';
 import { TermsTab, PrivacyTab, AboutTab, TakedownTab } from './LegalTabs.jsx';
-import { loadJSON, saveJSON, KEYS } from './storage.js';
+import { PlayerProvider } from './player.jsx';
+import { loadJSON, saveJSON, KEYS, recordOshiSince } from './storage.js';
 
 export default function App() {
   const bp = useBreakpoint();
@@ -76,8 +79,12 @@ export default function App() {
   });
 
   const setPushMember = (memberId) => {
-    if (memberId) localStorage.setItem(KEYS.member, memberId);
-    else localStorage.removeItem(KEYS.member);
+    if (memberId) {
+      localStorage.setItem(KEYS.member, memberId);
+      recordOshiSince(memberId);
+    } else {
+      localStorage.removeItem(KEYS.member);
+    }
     setProfile(p => ({ ...p, memberId }));
   };
 
@@ -110,20 +117,21 @@ export default function App() {
     { key: "my",      icon: "💖", label: "推し" },
     { key: "search",  icon: "🔍", label: "検索" },
     { key: "archive", icon: "📼", label: "みんなの撮可" },
-    { key: "saved",   icon: "♥",  label: "保存" },
+    { key: "live",    icon: "🎪", label: "ライブ" },
   ];
 
   const tabTitles = {
     "search":  "🔍 撮可を探す",
     "archive": "📼 みんなの撮可",
-    "saved":   "♥ 保存済み",
+    "live":    "🎪 ライブ",
+    "settings":"⚙ 設定",
     "terms":   "利用規約",
     "privacy": "プライバシーポリシー",
     "about":   "運営者情報",
     "takedown":"削除申請",
   };
 
-  const isLegalTab = ["terms","privacy","about","takedown"].includes(tab);
+  const isLegalTab = ["terms","privacy","about","takedown","settings"].includes(tab);
 
   const renderBody = () => {
     if (viewMember && viewArtist) return (
@@ -139,7 +147,8 @@ export default function App() {
       case "home": return (
         <HomeTab videos={videos} profile={profile}
           onSelectVideo={setSelected} onSelectArtist={(id) => setViewArtist(id)}
-          onSave={toggleSave} saved={saved} onGoToMember={goToMember} />
+          onSave={toggleSave} saved={saved} onGoToMember={goToMember}
+          onGoLive={() => navigateTo("live")} />
       );
       case "my": return (
         <MyTab profile={profile} videos={videos}
@@ -149,16 +158,8 @@ export default function App() {
       );
       case "search":  return <SearchTab />;
       case "archive": return <ArchiveTab />;
-      case "saved": return saved.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: D.textMuted }}>
-          <div style={{ fontSize: 36, marginBottom: 10 }}>♡</div>
-          <div style={{ fontSize: 13 }}>保存したクリップはありません</div>
-        </div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          {videos.filter(v => saved.includes(v.id)).map(v => <VideoCard key={v.id} v={v} onSelect={setSelected} onSave={toggleSave} isSaved={true} />)}
-        </div>
-      );
+      case "live":    return <LiveTab />;
+      case "settings": return <SettingsTab onChangePush={() => { localStorage.removeItem(KEYS.onboarding); setOnboardingDone(false); }} />;
       case "terms":    return <TermsTab />;
       case "privacy":  return <PrivacyTab />;
       case "about":    return <AboutTab />;
@@ -170,7 +171,7 @@ export default function App() {
   const contentKey = `${tab}-${viewArtist || ''}-${viewMember || ''}`;
 
   return (
-    <>
+    <PlayerProvider>
       {!splashDone && <Splash onFinish={() => setSplashDone(true)} />}
       {!onboardingDone && <Onboarding onComplete={handleOnboardingComplete} />}
       <div style={{ fontFamily: "'DM Sans', 'Noto Sans JP', -apple-system, sans-serif", background: D.bg, width: "100vw", height: "100dvh", overflow: "hidden", color: D.text, display: "flex", flexDirection: "column" }}>
@@ -221,6 +222,8 @@ export default function App() {
               )}
               <button onClick={() => { localStorage.removeItem(KEYS.onboarding); setOnboardingDone(false); }}
                 style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>推し設定</button>
+              <button onClick={() => navigateTo("settings")} title="設定"
+                style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 9px", color: D.textSub, fontSize: 12, cursor: "pointer" }}>⚙</button>
             </div>
           </div>
 
@@ -250,6 +253,6 @@ export default function App() {
         </div>
       </div>
     </div>
-    </>
+    </PlayerProvider>
   );
 }

@@ -4,6 +4,8 @@
 import { useState } from 'react';
 import { MEMBERS_FILTER, PLATFORM_CONFIG } from './data.js';
 import { loadJSON, saveJSON, KEYS, buildShareCode, parseShareCode, mergeShareData } from './storage.js';
+import { usePlayer } from './playerContext.js';
+import { PlayAllButton } from './components.jsx';
 
 export default function ArchiveTab() {
   const [memberFilter, setMemberFilter] = useState('all');
@@ -40,6 +42,25 @@ export default function ArchiveTab() {
     if (platformFilter !== 'all' && item.platform !== platformFilter) return false;
     return true;
   });
+
+  // YouTube ブックマークをアプリ内プレイヤーのプレイリストに変換
+  const player = usePlayer();
+  const playQueue = filtered
+    .filter(item => item.videoId)
+    .map(item => ({
+      videoId: item.videoId,
+      title: item.title || item.note || item.url,
+      channelTitle: item.authorName || '',
+      thumbnailUrl: item.thumbnailUrl || '',
+      publishedAt: '',
+    }));
+
+  const openInPlayer = (item, e) => {
+    if (!player || !item.videoId) return; // YouTube 以外は外部リンクへ
+    e.preventDefault();
+    const idx = playQueue.findIndex(q => q.videoId === item.videoId);
+    player.openPlayer(playQueue, Math.max(0, idx));
+  };
 
   const removeItem = (item) => {
     if (item.platform === 'youtube') {
@@ -245,8 +266,9 @@ export default function ArchiveTab() {
           ))}
         </div>
 
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 12 }}>
-          {filtered.length}件
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{filtered.length}件</span>
+          <PlayAllButton queue={playQueue} label="▶ プレイリスト再生" />
         </div>
       </div>
 
@@ -268,6 +290,7 @@ export default function ArchiveTab() {
                 border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
               }}>
                 <a href={item.url} target="_blank" rel="noopener noreferrer"
+                  onClick={(e) => openInPlayer(item, e)}
                   style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}>
                   {item.thumbnailUrl ? (
                     <img src={item.thumbnailUrl} alt={item.title || item.note || ''} style={{ width: 120, height: 68, objectFit: 'cover', flexShrink: 0 }} />

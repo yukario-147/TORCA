@@ -5,7 +5,10 @@ import { useState } from 'react';
 import { buildQuery, buildSnsUrls, MEMBER_ALIASES } from './searchDict.js';
 import { MEMBERS_FILTER, VENUES_FILTER, PERIODS_FILTER, SNS_PLATFORMS } from './data.js';
 import { ClipRow } from './components.jsx';
-import { useBookmarks, loadJSON, saveJSON, KEYS } from './storage.js';
+import {
+  useBookmarks, loadJSON, saveJSON, KEYS,
+  getSetting, getSearchHistory, addSearchHistory, getPinnedSearches, togglePinnedSearch,
+} from './storage.js';
 
 // URL の投稿情報から Gemini でメンバー・曲・会場を推定する（AI自動登録）
 async function aiExtractClipInfo({ url, title, authorName }) {
@@ -44,6 +47,49 @@ async function aiExtractClipInfo({ url, title, authorName }) {
   }
 }
 
+function scoreVideo(video, q) {
+  let score = 0;
+  const title = (video.title || '').toLowerCase();
+  const desc = (video.description || '').toLowerCase();
+  const lq = q.toLowerCase();
+  if (title.includes('撮可')) score += 30;
+  if (title.includes('きゅるして') || title.includes('きゅるりん')) score += 20;
+  if (lq && title.includes(lq)) score += 25;
+  if (lq && desc.includes(lq)) score += 10;
+  const daysOld = (Date.now() - new Date(video.publishedAt).getTime()) / (1000 * 86400);
+  if (daysOld < 7) score += 20;
+  else if (daysOld < 30) score += 10;
+  return score;
+}
+
+function sortResults(items, mode, q) {
+  if (mode === 'score') {
+    return [...items].sort((a, b) => (b.takaScore ?? -1) - (a.takaScore ?? -1));
+  } else if (mode === 'date') {
+    return [...items].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
+  } else {
+    return [...items].sort((a, b) => scoreVideo(b, q) - scoreVideo(a, q));
+  }
+}
+
+function filterByContent(items, filter) {
+  if (filter === 'taka') return items.filter(v => (v.takaScore ?? 0) >= 60 && !v.isOfficial);
+  if (filter === 'official') return items.filter(v => v.isOfficial === true);
+  return items;
+}
+
+// メンバー名・ニックネームをタイトル/説明で照合してポストフィルタリング
+function filterByMember(items, member) {
+  if (!member || member === 'all') return items;
+  const aliases = (MEMBER_ALIASES[member] || [member])
+    .filter(a => /[^\x20-\x7e]/.test(a)); // 日本語エイリアスのみ（英字誤マッチ防止）
+  if (aliases.length === 0) return items;
+  return items.filter(v => {
+    const text = `${v.title || ''} ${v.description || ''}`;
+    return aliases.some(alias => text.includes(alias));
+  });
+}
+
 export default function SearchTab() {
   const [query, setQuery] = useState('');
   const [memberFilter, setMemberFilter] = useState('all');
@@ -64,9 +110,11 @@ export default function SearchTab() {
   const [archiveNote, setArchiveNote] = useState('');
   const [archiveSaving, setArchiveSaving] = useState(false);
   const [archiveMsg, setArchiveMsg] = useState('');
-  const [aiEnabled, setAiEnabled] = useState(true);
+  const [aiEnabled, setAiEnabled] = useState(() => getSetting('aiDefault'));
   const [contentFilter, setContentFilter] = useState('all');
   const [searchStats, setSearchStats] = useState(null);
+  const [history, setHistory] = useState(getSearchHistory);
+  const [pinned, setPinned] = useState(getPinnedSearches);
 
   const togglePlatform = (id) => {
     setActivePlatforms(prev =>
@@ -74,61 +122,24 @@ export default function SearchTab() {
     );
   };
 
-  const scoreVideo = (video, q) => {
-    let score = 0;
-    const title = (video.title || '').toLowerCase();
-    const desc = (video.description || '').toLowerCase();
-    const lq = q.toLowerCase();
-    if (title.includes('撮可')) score += 30;
-    if (title.includes('きゅるして') || title.includes('きゅるりん')) score += 20;
-    if (lq && title.includes(lq)) score += 25;
-    if (lq && desc.includes(lq)) score += 10;
-    const daysOld = (Date.now() - new Date(video.publishedAt).getTime()) / (1000 * 86400);
-    if (daysOld < 7) score += 20;
-    else if (daysOld < 30) score += 10;
-    return score;
-  };
-
-  const sortResults = (items, mode, q) => {
-    if (mode === 'score') {
-      return [...items].sort((a, b) => (b.takaScore ?? -1) - (a.takaScore ?? -1));
-    } else if (mode === 'date') {
-      return [...items].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
-    } else {
-      return [...items].sort((a, b) => scoreVideo(b, q) - scoreVideo(a, q));
-    }
-  };
-
-  const filterByContent = (items, filter) => {
-    if (filter === 'taka') return items.filter(v => (v.takaScore ?? 0) >= 60 && !v.isOfficial);
-    if (filter === 'official') return items.filter(v => v.isOfficial === true);
-    return items;
-  };
-
-  // メンバー名・ニックネームをタイトル/説明で照合してポストフィルタリング
-  const filterByMember = (items, member) => {
-    if (!member || member === 'all') return items;
-    const aliases = (MEMBER_ALIASES[member] || [member])
-      .filter(a => /[^\x20-\x7e]/.test(a)); // 日本語エイリアスのみ（英字誤マッチ防止）
-    if (aliases.length === 0) return items;
-    return items.filter(v => {
-      const text = `${v.title || ''} ${v.description || ''}`;
-      return aliases.some(alias => text.includes(alias));
-    });
-  };
-
-  const doSearch = async () => {
+  const doSearch = async (overrideQuery) => {
+    const q = overrideQuery ?? query;
     const filters = {
       member: memberFilter !== 'all' ? memberFilter : null,
       venue: venueFilter || null,
       period: periodFilter,
     };
 
-    const { snsQuery, detectedMembers, detectedVenues } = buildQuery(query, filters);
+    const { snsQuery, detectedMembers, detectedVenues } = buildQuery(q, filters);
     const snsLinks = buildSnsUrls(snsQuery, activePlatforms);
 
+    if (q.trim()) {
+      addSearchHistory(q);
+      setHistory(getSearchHistory());
+    }
+
     setSnsUrls(snsLinks);
-    setDetectedInfo({ detectedMembers, detectedVenues, youtubeQuery: query });
+    setDetectedInfo({ detectedMembers, detectedVenues, youtubeQuery: q });
     setLoading(true);
     setError('');
     setSearched(true);
@@ -140,7 +151,7 @@ export default function SearchTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userInput: query,
+          userInput: q,
           filters,
           order: sortMode === 'date' ? 'date' : 'relevance',
         }),
@@ -155,7 +166,7 @@ export default function SearchTab() {
         geminiUsed: !!data.geminiUsed,
       });
 
-      const sorted = sortResults(data.items || [], sortMode, query);
+      const sorted = sortResults(data.items || [], sortMode, q);
       setResults(sorted);
     } catch (err) {
       setError('検索に失敗しました。しばらくしてからもう一度お試しください。');
@@ -168,6 +179,17 @@ export default function SearchTab() {
   const handleSearch = () => {
     setResults([]);
     doSearch();
+  };
+
+  // 履歴・ピン留めチップからのワンタップ再検索
+  const runQuick = (q) => {
+    setQuery(q);
+    setResults([]);
+    doSearch(q);
+  };
+
+  const togglePin = (q) => {
+    setPinned(togglePinnedSearch(q));
   };
 
   const handleKeyDown = (e) => {
@@ -284,6 +306,36 @@ export default function SearchTab() {
             検索
           </button>
         </div>
+
+        {/* ピン留め検索・検索履歴 */}
+        {(pinned.length > 0 || history.length > 0) && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+            {pinned.map(q => (
+              <span key={'pin_' + q} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 6px 4px 11px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
+                color: '#fbbf24',
+              }}>
+                <span onClick={() => runQuick(q)} style={{ cursor: 'pointer' }}>{q}</span>
+                <span onClick={() => togglePin(q)} title="ピン留め解除"
+                  style={{ cursor: 'pointer', fontSize: 10, opacity: 0.85 }}>★</span>
+              </span>
+            ))}
+            {history.filter(q => !pinned.includes(q)).slice(0, 6).map(q => (
+              <span key={'his_' + q} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                padding: '4px 6px 4px 11px', borderRadius: 20, fontSize: 11,
+                background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
+                color: 'var(--text-secondary)',
+              }}>
+                <span onClick={() => runQuick(q)} style={{ cursor: 'pointer' }}>🕐 {q}</span>
+                <span onClick={() => togglePin(q)} title="ピン留め"
+                  style={{ cursor: 'pointer', fontSize: 10, opacity: 0.6 }}>☆</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 6 }}>メンバー</div>
@@ -568,18 +620,23 @@ export default function SearchTab() {
         </div>
       )}
 
-      {!loading && results.length > 0 && (
-        <div style={{ padding: '0 16px' }}>
-          {filterByContent(filterByMember(results, memberFilter), contentFilter).map(video => (
-            <ClipRow
-              key={video.videoId}
-              video={video}
-              bookmarked={isBookmarked(video.videoId)}
-              onToggleBookmark={toggleBookmark}
-            />
-          ))}
-        </div>
-      )}
+      {!loading && results.length > 0 && (() => {
+        const visible = filterByContent(filterByMember(results, memberFilter), contentFilter);
+        return (
+          <div style={{ padding: '0 16px' }}>
+            {visible.map((video, i) => (
+              <ClipRow
+                key={video.videoId}
+                video={video}
+                queue={visible}
+                queueIndex={i}
+                bookmarked={isBookmarked(video.videoId)}
+                onToggleBookmark={toggleBookmark}
+              />
+            ))}
+          </div>
+        );
+      })()}
 
       {searched && !loading && results.length === 0 && !error && (
         <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-secondary)' }}>

@@ -4,6 +4,8 @@
 import { useState } from "react";
 import { D, fmt, formatDate } from "./theme.js";
 import { findArtist, findMember, KYURUSHITE } from "./data.js";
+import { usePlayer } from "./playerContext.js";
+import { isNewSince } from "./storage.js";
 
 export function Badge({ children, variant = "default" }) {
   const map = {
@@ -145,9 +147,22 @@ function takaBadge(video) {
 
 // =====================
 // クリップ行（YouTube 実データ用の横長カード）
+// queue/queueIndex を渡すとタップでアプリ内プレイヤー（撮可シアター）が開き、
+// その一覧をプレイリストとして連続再生できる
 // =====================
-export function ClipRow({ video, bookmarked, onToggleBookmark, rank }) {
+export function ClipRow({ video, bookmarked, onToggleBookmark, rank, queue, queueIndex }) {
   const badge = takaBadge(video);
+  const player = usePlayer();
+  const canPlay = !!player && !!video.videoId;
+  const isNew = isNewSince(video.publishedAt);
+
+  const handleOpen = (e) => {
+    if (!canPlay) return; // プレイヤー外では通常の外部リンク遷移
+    e.preventDefault();
+    const q = queue && queue.length > 0 ? queue : [video];
+    player.openPlayer(q, queueIndex ?? q.indexOf(video));
+  };
+
   return (
     <div
       style={{
@@ -166,21 +181,42 @@ export function ClipRow({ video, bookmarked, onToggleBookmark, rank }) {
         href={`https://www.youtube.com/watch?v=${video.videoId}`}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={handleOpen}
         style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}
       >
-        {video.thumbnailUrl ? (
-          <img
-            src={video.thumbnailUrl}
-            alt={video.title}
-            style={{ width: 120, height: 68, objectFit: 'cover', flexShrink: 0 }}
-          />
-        ) : (
-          <div style={{
-            width: 120, height: 68, flexShrink: 0, background: '#1a1828',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--text-secondary)', fontSize: 20,
-          }}>▶</div>
-        )}
+        <div style={{ position: 'relative', width: 120, height: 68, flexShrink: 0 }}>
+          {video.thumbnailUrl ? (
+            <img
+              src={video.thumbnailUrl}
+              alt={video.title}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          ) : (
+            <div style={{
+              width: '100%', height: '100%', background: '#1a1828',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--text-secondary)', fontSize: 20,
+            }}>▶</div>
+          )}
+          {canPlay && (
+            <div style={{
+              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <span style={{
+                width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.55)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, color: '#fff', paddingLeft: 2,
+              }}>▶</span>
+            </div>
+          )}
+          {isNew && (
+            <span style={{
+              position: 'absolute', top: 4, left: 4, fontSize: 8, fontWeight: 900,
+              padding: '1px 5px', borderRadius: 4, letterSpacing: '0.06em',
+              background: 'var(--accent)', color: '#fff',
+            }}>NEW</span>
+          )}
+        </div>
         <div style={{ flex: 1, minWidth: 0, padding: '8px 36px 8px 10px' }}>
           <p style={{
             fontSize: 12, fontWeight: 600, margin: '0 0 4px', lineHeight: 1.4,
@@ -221,6 +257,27 @@ export function ClipRow({ video, bookmarked, onToggleBookmark, rank }) {
         </button>
       )}
     </div>
+  );
+}
+
+// =====================
+// 連続再生ボタン（セクション見出し横に置く小型ボタン）
+// =====================
+export function PlayAllButton({ queue, label = '▶ 連続再生' }) {
+  const player = usePlayer();
+  if (!player || !queue || queue.filter(v => v.videoId).length === 0) return null;
+  return (
+    <button
+      onClick={() => player.openPlayer(queue, 0)}
+      style={{
+        background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+        border: 'none', borderRadius: 20, padding: '4px 13px',
+        color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer',
+        boxShadow: '0 2px 12px rgba(232,64,160,0.35)',
+      }}
+    >
+      {label}
+    </button>
   );
 }
 

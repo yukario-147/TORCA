@@ -5,13 +5,14 @@
 import { useState } from "react";
 import { D, fmt } from "./theme.js";
 import { KYURUSHITE, QUALITIES, SOURCES, findArtist, findMember } from "./data.js";
-import { VideoCard, ClipRow, Spinner } from "./components.jsx";
+import { VideoCard, ClipRow, Spinner, PlayAllButton } from "./components.jsx";
 import { useYouTubeFeed } from "./useFeed.js";
-import { useBookmarks } from "./storage.js";
+import { useBookmarks, getPrevVisit } from "./storage.js";
+import { nextEvent, daysUntil } from "./events.js";
 
 const HOME_FEED_BODY = { userInput: '', filters: { period: 'month' } };
 
-export default function HomeTab({ videos, onSelectVideo, onSave, saved, onGoToMember }) {
+export default function HomeTab({ videos, onSelectVideo, onSave, saved, onGoToMember, onGoLive }) {
   const [search, setSearch] = useState("");
   const [quality, setQuality] = useState("すべて");
   const [source, setSource] = useState("すべて");
@@ -32,6 +33,10 @@ export default function HomeTab({ videos, onSelectVideo, onSave, saved, onGoToMe
   const feedRanking = [...feedFiltered]
     .sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0))
     .slice(0, 5);
+
+  const prevVisit = getPrevVisit();
+  const newCount = prevVisit ? feed.filter(v => v.publishedAt && v.publishedAt > prevVisit).length : 0;
+  const next = nextEvent();
 
   // デモデータ（フォールバック用）
   const trending = videos.filter(v => v.trending);
@@ -100,6 +105,30 @@ export default function HomeTab({ videos, onSelectVideo, onSave, saved, onGoToMe
         </div>
       </div>
 
+      {/* 次のライブ カウントダウン */}
+      {next && (
+        <button onClick={onGoLive} style={{
+          width: "100%", textAlign: "left", cursor: "pointer",
+          background: "linear-gradient(135deg,rgba(var(--accent-rgb),0.14),rgba(168,85,247,0.06))",
+          border: "1px solid rgba(var(--accent-rgb),0.3)", borderRadius: 14,
+          padding: "12px 14px", marginBottom: 14,
+          display: "flex", alignItems: "center", gap: 12,
+        }}>
+          <div style={{ textAlign: "center", flexShrink: 0 }}>
+            <div style={{ fontSize: 22, fontWeight: 900, lineHeight: 1, background: "linear-gradient(120deg, var(--accent-light), var(--accent2))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              {daysUntil(next.date) === 0 ? "本日" : daysUntil(next.date)}
+            </div>
+            {daysUntil(next.date) !== 0 && <div style={{ fontSize: 8, color: D.textSub, fontWeight: 700 }}>DAYS</div>}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 9, color: "var(--accent-light)", fontWeight: 800, letterSpacing: "0.1em" }}>🎪 NEXT LIVE</div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: D.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{next.title}</div>
+            <div style={{ fontSize: 10, color: D.textSub }}>📍 {next.venue}</div>
+          </div>
+          <span style={{ color: D.textMuted, fontSize: 14 }}>›</span>
+        </button>
+      )}
+
       {/* 検索 */}
       <div style={{ display: "flex", alignItems: "center", background: "rgba(255,255,255,0.04)", border: `1px solid ${D.border}`, borderRadius: 12, padding: "9px 12px", gap: 8, marginBottom: 10 }}>
         <span style={{ color: D.textMuted, fontSize: 13 }}>🔍</span>
@@ -112,27 +141,40 @@ export default function HomeTab({ videos, onSelectVideo, onSave, saved, onGoToMe
 
       {hasFeed && (
         <>
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, color: D.red, letterSpacing: "0.1em", marginBottom: 2, fontWeight: 700 }}>🔥 TRENDING</div>
-            <div style={{ fontSize: 15, fontWeight: 900 }}>急上昇中のクリップ</div>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, color: D.red, letterSpacing: "0.1em", marginBottom: 2, fontWeight: 700 }}>
+                🔥 TRENDING
+                {newCount > 0 && (
+                  <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 900, padding: "1px 7px", borderRadius: 10, background: "var(--accent)", color: "#fff", letterSpacing: 0 }}>
+                    前回から +{newCount} 新着
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 900 }}>急上昇中のクリップ</div>
+            </div>
+            <PlayAllButton queue={feedTrending} />
           </div>
           {feedTrending.length === 0 ? (
             <div style={{ textAlign: "center", padding: "24px 0 32px", color: D.textMuted, fontSize: 12 }}>該当するクリップがありません</div>
           ) : (
             <div style={{ marginBottom: 22 }}>
-              {feedTrending.map(v => (
-                <ClipRow key={v.videoId} video={v} bookmarked={isBookmarked(v.videoId)} onToggleBookmark={toggleBookmark} />
+              {feedTrending.map((v, i) => (
+                <ClipRow key={v.videoId} video={v} queue={feedTrending} queueIndex={i} bookmarked={isBookmarked(v.videoId)} onToggleBookmark={toggleBookmark} />
               ))}
             </div>
           )}
 
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, color: D.gold, letterSpacing: "0.1em", marginBottom: 2, fontWeight: 700 }}>🏆 RANKING</div>
-            <div style={{ fontSize: 15, fontWeight: 900 }}>再生数ランキング TOP5</div>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, color: D.gold, letterSpacing: "0.1em", marginBottom: 2, fontWeight: 700 }}>🏆 RANKING</div>
+              <div style={{ fontSize: 15, fontWeight: 900 }}>再生数ランキング TOP5</div>
+            </div>
+            <PlayAllButton queue={feedRanking} />
           </div>
           <div style={{ marginBottom: 8 }}>
             {feedRanking.map((v, i) => (
-              <ClipRow key={v.videoId} video={v} rank={i + 1} bookmarked={isBookmarked(v.videoId)} onToggleBookmark={toggleBookmark} />
+              <ClipRow key={v.videoId} video={v} rank={i + 1} queue={feedRanking} queueIndex={i} bookmarked={isBookmarked(v.videoId)} onToggleBookmark={toggleBookmark} />
             ))}
           </div>
         </>
