@@ -288,6 +288,10 @@ export default function SearchTab({ sharedUrl }) {
           entry.title = oe.title || null;
           entry.authorName = oe.authorName || null;
           entry.thumbnailUrl = oe.thumbnailUrl || null;
+          if (platform === 'tiktok') {
+            entry.tiktokVideoId = oe.videoId || null;
+            if (oe.resolvedUrl) entry.url = oe.resolvedUrl; // 短縮 URL は実 URL に置き換えて保存
+          }
         }
       } catch { /* oEmbed failure is non-critical */ }
     }

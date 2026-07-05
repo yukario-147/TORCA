@@ -1,7 +1,7 @@
 // src/ArchiveTab.jsx
 // みんなの撮可：ブックマーク + 手動/AIアーカイブの一覧と、共有コードによるファン間共有
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MEMBERS_FILTER, PLATFORM_CONFIG } from './data.js';
 import { loadJSON, saveJSON, KEYS, buildShareCode, parseShareCode, mergeShareData } from './storage.js';
 import { usePlayer } from './playerContext.js';
@@ -14,6 +14,43 @@ export default function ArchiveTab() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [sharePanel, setSharePanel] = useState(null); // null | 'export' | 'import'
   const [embedItem, setEmbedItem] = useState(null);
+
+  // タイトル未取得の既存エントリを oEmbed で遡って補完する
+  // （X のタイトル抽出・TikTok 短縮 URL 解決に対応する前に保存されたデータの修復）
+  useEffect(() => {
+    const arc = loadJSON(KEYS.archive, []);
+    const targets = arc
+      .filter(a => (a.platform === 'x' || a.platform === 'tiktok') && !a.title && !a.enrichTried)
+      .slice(0, 5);
+    if (targets.length === 0) return;
+    let alive = true;
+    (async () => {
+      const updated = [...arc];
+      for (const t of targets) {
+        const i = updated.findIndex(a => a.id === t.id);
+        if (i < 0) continue;
+        updated[i] = { ...updated[i], enrichTried: true };
+        try {
+          const r = await fetch(`/api/oembed?url=${encodeURIComponent(t.url)}&platform=${t.platform}`);
+          const oe = r.ok ? await r.json() : null;
+          if (oe) {
+            updated[i] = {
+              ...updated[i],
+              title: oe.title || updated[i].title,
+              authorName: oe.authorName || updated[i].authorName,
+              thumbnailUrl: updated[i].thumbnailUrl || oe.thumbnailUrl || null,
+              ...(t.platform === 'tiktok' && oe.videoId ? { tiktokVideoId: oe.videoId } : {}),
+              ...(oe.resolvedUrl ? { url: oe.resolvedUrl } : {}),
+            };
+          }
+        } catch { /* 補完失敗は無視（enrichTried で再試行を防ぐ） */ }
+      }
+      if (!alive) return;
+      saveJSON(KEYS.archive, updated);
+      setRefreshKey(k => k + 1);
+    })();
+    return () => { alive = false; };
+  }, []);
   const [shareCode, setShareCode] = useState('');
   const [importCode, setImportCode] = useState('');
   const [shareMsg, setShareMsg] = useState('');
@@ -340,8 +377,9 @@ export default function ArchiveTab() {
                       color: 'var(--text-primary)',
                       display: '-webkit-box', WebkitLineClamp: 2,
                       WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      wordBreak: 'break-word',
                     }}>
-                      {item.note || item.title || item.url}
+                      {item.note || item.title || (item.authorName ? `${item.authorName} のポスト` : item.url)}
                     </p>
                     <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
                       {[item.song && `🎵 ${item.song}`, item.venue && `📍 ${item.venue}`, item.authorName]

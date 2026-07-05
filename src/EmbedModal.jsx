@@ -84,10 +84,35 @@ function XEmbed({ url, onFail }) {
 }
 
 // TikTok：公式埋め込み iframe（tiktok.com/embed/v2）
-function TikTokEmbed({ url, onFail }) {
-  const id = tiktokVideoId(url);
-  useEffect(() => { if (!id) onFail(); }, [id, onFail]);
-  if (!id) return null;
+// 短縮 URL（vt.tiktok.com 等）で動画 ID が取れない場合は oEmbed API 経由で解決する
+function TikTokEmbed({ item, onFail }) {
+  const [id, setId] = useState(() => item.tiktokVideoId || tiktokVideoId(item.url));
+  const [resolving, setResolving] = useState(() => !(item.tiktokVideoId || tiktokVideoId(item.url)));
+
+  useEffect(() => {
+    if (id) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`/api/oembed?url=${encodeURIComponent(item.url)}&platform=tiktok`);
+        const data = r.ok ? await r.json() : null;
+        if (!alive) return;
+        if (data?.videoId) setId(data.videoId);
+        else onFail();
+      } catch {
+        if (alive) onFail();
+      } finally {
+        if (alive) setResolving(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [id, item.url, onFail]);
+
+  if (!id) {
+    return resolving
+      ? <div style={{ textAlign: 'center', padding: 40, color: D.textSub, fontSize: 12 }}>動画情報を取得中…</div>
+      : null;
+  }
   return (
     <iframe
       src={`https://www.tiktok.com/embed/v2/${id}`}
@@ -156,7 +181,7 @@ export default function EmbedModal({ item, onClose }) {
           ) : item.platform === 'x' ? (
             <XEmbed url={item.url} onFail={() => setFailed(true)} />
           ) : item.platform === 'tiktok' ? (
-            <TikTokEmbed url={item.url} onFail={() => setFailed(true)} />
+            <TikTokEmbed item={item} onFail={() => setFailed(true)} />
           ) : null}
 
           {(item.note || item.song || item.venue) && !failed && (
