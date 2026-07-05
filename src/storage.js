@@ -50,6 +50,28 @@ export function useBookmarks() {
   return { bookmarks, toggle, has };
 }
 
+// SNS 検索結果（X/TikTok/Instagram）を URL キーでアーカイブに保存/解除するフック
+export function useArchive() {
+  const [archive, setArchive] = useState(() => loadJSON(KEYS.archive, []));
+  const toggle = (entry) => {
+    setArchive(prev => {
+      const exists = prev.some(a => a.url === entry.url);
+      const next = exists
+        ? prev.filter(a => a.url !== entry.url)
+        : [{
+            id: 'arch_' + Date.now(),
+            savedAt: new Date().toISOString(),
+            member: null, note: null, song: null, venue: null, aiDetected: false,
+            ...entry,
+          }, ...prev];
+      saveJSON(KEYS.archive, next);
+      return next;
+    });
+  };
+  const has = (url) => archive.some(a => a.url === url);
+  return { archive, toggle, has };
+}
+
 // =====================
 // 共有コード（みんなの撮可）
 // サーバーを介さず、テキストのコードでアーカイブをファン同士で交換する。

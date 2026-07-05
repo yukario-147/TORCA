@@ -18,6 +18,12 @@ function tiktokVideoId(url) {
   return m ? m[1] : null;
 }
 
+// Instagram URL からショートコードを抽出
+function igShortcode(url) {
+  const m = (url || '').match(/\/(?:p|reel|reels|tv)\/([\w-]+)/);
+  return m ? m[1] : null;
+}
+
 function loadScript(src) {
   return new Promise((resolve) => {
     if (document.querySelector(`script[src="${src}"]`)) return resolve();
@@ -128,6 +134,26 @@ function TikTokEmbed({ item, onFail }) {
   );
 }
 
+// Instagram：公式埋め込み iframe（instagram.com/p/{code}/embed/）
+function InstagramEmbed({ item, onFail }) {
+  const code = igShortcode(item.url);
+  useEffect(() => { if (!code) onFail(); }, [code, onFail]);
+  if (!code) return null;
+  return (
+    <iframe
+      src={`https://www.instagram.com/p/${code}/embed/captioned/`}
+      style={{
+        width: '100%', maxWidth: 400, height: 'min(76vh, 640px)',
+        border: 'none', borderRadius: 14, display: 'block', margin: '0 auto',
+        background: '#fff',
+      }}
+      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+      allowFullScreen
+      title="Instagram"
+    />
+  );
+}
+
 export default function EmbedModal({ item, onClose }) {
   const [failed, setFailed] = useState(false);
 
@@ -137,7 +163,7 @@ export default function EmbedModal({ item, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const platformLabel = item.platform === 'x' ? '𝕏 ポスト' : 'TikTok';
+  const platformLabel = item.platform === 'x' ? '𝕏 ポスト' : item.platform === 'instagram' ? 'Instagram' : 'TikTok';
 
   return (
     <div
@@ -182,6 +208,8 @@ export default function EmbedModal({ item, onClose }) {
             <XEmbed url={item.url} onFail={() => setFailed(true)} />
           ) : item.platform === 'tiktok' ? (
             <TikTokEmbed item={item} onFail={() => setFailed(true)} />
+          ) : item.platform === 'instagram' ? (
+            <InstagramEmbed item={item} onFail={() => setFailed(true)} />
           ) : null}
 
           {(item.note || item.song || item.venue) && !failed && (

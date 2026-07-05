@@ -168,6 +168,92 @@ export function ClipRow({ video, bookmarked, onToggleBookmark, rank, queue, queu
 }
 
 // =====================
+// SNS 検索結果行（X / TikTok / Instagram）
+// タップでアプリ内埋め込みビューアを開き、♥ でアーカイブに保存する
+// =====================
+export function SnsRow({ item, saved, onToggleSave, onOpen, platformConfig }) {
+  const cfg = platformConfig;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'stretch', position: 'relative',
+      background: 'var(--bg-card)', borderRadius: 10,
+      border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
+    }}>
+      <a
+        href={item.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => { e.preventDefault(); onOpen(item); }}
+        style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}
+      >
+        <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0 }}>
+          {item.thumbnailUrl ? (
+            <img src={item.thumbnailUrl} alt="" referrerPolicy="no-referrer"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }} />
+          ) : null}
+          <div style={{
+            width: '100%', height: '100%', background: `${cfg.color}14`,
+            display: item.thumbnailUrl ? 'none' : 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            fontSize: 26, color: cfg.color, position: item.thumbnailUrl ? 'absolute' : 'static', inset: 0,
+          }}>{cfg.icon}</div>
+          <span style={{
+            position: 'absolute', bottom: 4, left: 4,
+            width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 10, color: '#fff', paddingLeft: 1,
+          }}>▶</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0, padding: '9px 36px 9px 10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+            <span style={{
+              fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
+              background: `${cfg.color}22`, color: cfg.color,
+            }}>{cfg.icon} {cfg.label}</span>
+            {item.authorName && (
+              <span style={{ fontSize: 10, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {item.authorName}
+              </span>
+            )}
+          </div>
+          <p style={{
+            fontSize: 12, fontWeight: 600, margin: '0 0 3px', lineHeight: 1.4,
+            color: 'var(--text-primary)', wordBreak: 'break-word',
+            display: '-webkit-box', WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}>
+            {item.title}
+          </p>
+          {item.snippet && (
+            <p style={{
+              fontSize: 10, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4,
+              display: '-webkit-box', WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word',
+            }}>
+              {item.snippet}
+            </p>
+          )}
+        </div>
+      </a>
+      <button
+        onClick={() => onToggleSave(item)}
+        style={{
+          position: 'absolute', top: 6, right: 6,
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          fontSize: 16, padding: '2px 4px',
+          color: saved ? 'var(--accent)' : 'var(--text-secondary)',
+          transition: 'color 0.2s',
+        }}
+        title={saved ? 'アーカイブから削除' : 'アーカイブに保存'}
+      >
+        {saved ? '♥' : '♡'}
+      </button>
+    </div>
+  );
+}
+
+// =====================
 // 連続再生ボタン（セクション見出し横に置く小型ボタン）
 // =====================
 export function PlayAllButton({ queue, label = '▶ 連続再生' }) {

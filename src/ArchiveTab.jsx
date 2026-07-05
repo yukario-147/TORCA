@@ -102,7 +102,7 @@ export default function ArchiveTab() {
       player.openPlayer(playQueue, Math.max(0, idx));
       return;
     }
-    if (item.platform === 'x' || item.platform === 'tiktok') {
+    if (item.platform === 'x' || item.platform === 'tiktok' || item.platform === 'instagram') {
       e.preventDefault();
       setEmbedItem(item);
     }
