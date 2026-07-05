@@ -168,87 +168,136 @@ export function ClipRow({ video, bookmarked, onToggleBookmark, rank, queue, queu
 }
 
 // =====================
-// SNS 検索結果行（X / TikTok / Instagram）
+// SNS 検索結果カード（X / TikTok / Instagram）
 // タップでアプリ内埋め込みビューアを開き、♥ でアーカイブに保存する
+// ・サムネイルあり（TikTok等）→ メディアカード
+// ・サムネイルなし（X等）    → ポストカード（本文を主役にした引用風レイアウト）
 // =====================
 export function SnsRow({ item, saved, onToggleSave, onOpen, platformConfig }) {
   const cfg = platformConfig;
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'stretch', position: 'relative',
-      background: 'var(--bg-card)', borderRadius: 10,
-      border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
-    }}>
-      <a
-        href={item.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => { e.preventDefault(); onOpen(item); }}
-        style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}
-      >
-        <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0 }}>
-          {item.thumbnailUrl ? (
-            <img src={item.thumbnailUrl} alt="" referrerPolicy="no-referrer"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-              onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextSibling.style.display = 'flex'; }} />
-          ) : null}
-          <div style={{
-            width: '100%', height: '100%', background: `${cfg.color}14`,
-            display: item.thumbnailUrl ? 'none' : 'flex',
-            alignItems: 'center', justifyContent: 'center',
-            fontSize: 26, color: cfg.color, position: item.thumbnailUrl ? 'absolute' : 'static', inset: 0,
-          }}>{cfg.icon}</div>
-          <span style={{
-            position: 'absolute', bottom: 4, left: 4,
-            width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.55)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, color: '#fff', paddingLeft: 1,
-          }}>▶</span>
-        </div>
-        <div style={{ flex: 1, minWidth: 0, padding: '9px 36px 9px 10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
-            <span style={{
-              fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-              background: `${cfg.color}22`, color: cfg.color,
-            }}>{cfg.icon} {cfg.label}</span>
+  const [thumbBroken, setThumbBroken] = useState(false);
+  const hasThumb = !!item.thumbnailUrl && !thumbBroken;
+
+  const saveBtn = (
+    <button
+      onClick={() => onToggleSave(item)}
+      style={{
+        position: 'absolute', top: 8, right: 8,
+        background: 'rgba(12,12,18,0.5)', border: 'none', cursor: 'pointer',
+        fontSize: 15, width: 30, height: 30, borderRadius: '50%',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: saved ? 'var(--accent)' : 'rgba(255,255,255,0.75)',
+        transition: 'color 0.2s',
+      }}
+      title={saved ? 'アーカイブから削除' : 'アーカイブに保存'}
+    >
+      {saved ? '♥' : '♡'}
+    </button>
+  );
+
+  const badge = (
+    <span style={{
+      fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 5,
+      background: `${cfg.color}22`, color: cfg.color, letterSpacing: '0.02em',
+    }}>{cfg.icon} {cfg.label}</span>
+  );
+
+  // ---------- ポストカード（サムネイルなし・X 向け） ----------
+  if (!hasThumb) {
+    return (
+      <div style={{
+        position: 'relative', marginBottom: 10,
+        background: 'var(--bg-card)', borderRadius: 14,
+        border: '1px solid var(--border-subtle)',
+        borderLeft: `3px solid ${cfg.color}`,
+        overflow: 'hidden',
+      }}>
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => { e.preventDefault(); onOpen(item); }}
+          style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '12px 42px 11px 14px' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+            {badge}
             {item.authorName && (
-              <span style={{ fontSize: 10, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {item.authorName}
               </span>
             )}
           </div>
           <p style={{
-            fontSize: 12, fontWeight: 600, margin: '0 0 3px', lineHeight: 1.4,
+            fontSize: 13, fontWeight: 500, margin: 0, lineHeight: 1.65,
             color: 'var(--text-primary)', wordBreak: 'break-word',
-            display: '-webkit-box', WebkitLineClamp: 2,
+            display: '-webkit-box', WebkitLineClamp: 4,
             WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>
             {item.title}
           </p>
           {item.snippet && (
             <p style={{
-              fontSize: 10, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4,
+              fontSize: 11, color: 'var(--text-secondary)', margin: '6px 0 0', lineHeight: 1.5,
               display: '-webkit-box', WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word',
             }}>
               {item.snippet}
             </p>
           )}
+          <div style={{ fontSize: 10, color: cfg.color, fontWeight: 700, marginTop: 8 }}>
+            ▶ タップして表示
+          </div>
+        </a>
+        {saveBtn}
+      </div>
+    );
+  }
+
+  // ---------- メディアカード（サムネイルあり・TikTok / Instagram 向け） ----------
+  return (
+    <div style={{
+      position: 'relative', marginBottom: 10,
+      background: 'var(--bg-card)', borderRadius: 14,
+      border: '1px solid var(--border-subtle)', overflow: 'hidden',
+    }}>
+      <a
+        href={item.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => { e.preventDefault(); onOpen(item); }}
+        style={{ display: 'flex', textDecoration: 'none', color: 'inherit', minWidth: 0 }}
+      >
+        <div style={{ position: 'relative', width: 110, alignSelf: 'stretch', minHeight: 96, flexShrink: 0, background: '#0a0a10' }}>
+          <img src={item.thumbnailUrl} alt="" referrerPolicy="no-referrer"
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            onError={() => setThumbBroken(true)} />
+          <span style={{
+            position: 'absolute', bottom: 6, left: 6,
+            width: 24, height: 24, borderRadius: '50%', background: 'rgba(0,0,0,0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 10, color: '#fff', paddingLeft: 1,
+          }}>▶</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0, padding: '11px 42px 10px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+            {badge}
+            {item.authorName && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {item.authorName}
+              </span>
+            )}
+          </div>
+          <p style={{
+            fontSize: 12, fontWeight: 600, margin: 0, lineHeight: 1.55,
+            color: 'var(--text-primary)', wordBreak: 'break-word',
+            display: '-webkit-box', WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          }}>
+            {item.title}
+          </p>
         </div>
       </a>
-      <button
-        onClick={() => onToggleSave(item)}
-        style={{
-          position: 'absolute', top: 6, right: 6,
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          fontSize: 16, padding: '2px 4px',
-          color: saved ? 'var(--accent)' : 'var(--text-secondary)',
-          transition: 'color 0.2s',
-        }}
-        title={saved ? 'アーカイブから削除' : 'アーカイブに保存'}
-      >
-        {saved ? '♥' : '♡'}
-      </button>
+      {saveBtn}
     </div>
   );
 }

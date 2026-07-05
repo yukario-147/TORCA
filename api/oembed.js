@@ -41,24 +41,15 @@ function tiktokIdFromUrl(url) {
   return m ? m[1] : null;
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+const EMPTY = { title: null, authorName: null, thumbnailUrl: null, html: null, videoId: null, resolvedUrl: null };
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { url, platform } = req.query;
-  if (!url) return res.status(400).json({ error: 'url is required' });
-
-  const empty = { title: null, authorName: null, thumbnailUrl: null, html: null, videoId: null, resolvedUrl: null };
-
+// oEmbed 情報の取得コア。api/sns-search.js の検索結果補強からも共用する
+export async function fetchOembed(platform, url, { timeoutMs = 8000 } = {}) {
   // Instagram は oEmbed に認証が必要なためスキップ
-  if (platform === 'instagram') {
-    return res.status(200).json(empty);
-  }
+  if (platform === 'instagram') return { ...EMPTY };
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     let oembedUrl;
     let resolvedUrl = url;
@@ -72,12 +63,12 @@ export default async function handler(req, res) {
     } else if (platform === 'youtube') {
       oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
     } else {
-      return res.status(400).json({ error: 'Unsupported platform' });
+      return null;
     }
 
-    const response = await fetch(oembedUrl, { headers: UA });
+    const response = await fetch(oembedUrl, { headers: UA, signal: controller.signal });
     if (!response.ok) {
-      return res.status(200).json({ ...empty, resolvedUrl });
+      return { ...EMPTY, resolvedUrl: resolvedUrl !== url ? resolvedUrl : null };
     }
 
     const data = await response.json();
@@ -100,16 +91,34 @@ export default async function handler(req, res) {
         || (html?.match(/data-video-id="(\d+)"/)?.[1] ?? null);
     }
 
-    return res.status(200).json({
+    return {
       title,
       authorName: data.author_name || null,
       thumbnailUrl: data.thumbnail_url || null,
       html,
       videoId,
       resolvedUrl: resolvedUrl !== url ? resolvedUrl : null,
-    });
+    };
   } catch (err) {
-    console.error('oembed error:', err);
-    return res.status(200).json(empty);
+    if (err?.name !== 'AbortError') console.error('oembed fetch error:', err);
+    return { ...EMPTY };
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+
+  const { url, platform } = req.query;
+  if (!url) return res.status(400).json({ error: 'url is required' });
+
+  const result = await fetchOembed(platform, url);
+  if (result === null) return res.status(400).json({ error: 'Unsupported platform' });
+  return res.status(200).json(result);
 }

@@ -11,6 +11,7 @@
 //                   （※新規プロジェクトへの提供終了。既存アクセス保有者のみ）
 
 import { MEMBER_ALIASES } from '../src/searchDict.js';
+import { fetchOembed } from './oembed.js';
 
 const PLATFORM_RULES = {
   x: {
@@ -55,6 +56,14 @@ function buildTopic(userInput, filters) {
   return [topic || '撮可', groupTerm].filter(Boolean).join(' ');
 }
 
+// 検索エンジン由来のテキストを整える
+function cleanText(s) {
+  return (s || '')
+    .replace(/^[.…\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // 結果を共通形式に整形（投稿 URL のみ・重複排除）
 function normalize(platform, rawItems) {
   const rule = PLATFORM_RULES[platform];
@@ -63,11 +72,17 @@ function normalize(platform, rawItems) {
     .filter(item => rule.postPattern.test(item.url || ''))
     .map(item => {
       const url = item.url.replace(/^http:/, 'https:').replace(/twitter\.com/, 'x.com');
+      const title = cleanText((item.title || '').replace(/\s*[|｜-]\s*(X|TikTok|Instagram).*$/i, '')) || url;
+      let snippet = cleanText(item.snippet).slice(0, 160);
+      // タイトルと重複するスニペットは省く（読みやすさ優先）
+      if (snippet && title.length > 12 && (snippet.startsWith(title.slice(0, 12)) || title.startsWith(snippet.slice(0, 12)))) {
+        snippet = '';
+      }
       return {
         url,
         platform,
-        title: (item.title || '').replace(/\s*[|｜-]\s*(X|TikTok|Instagram).*$/i, '').trim() || item.title || url,
-        snippet: (item.snippet || '').slice(0, 160),
+        title,
+        snippet,
         thumbnailUrl: item.thumbnailUrl || null,
         authorName: authorFromUrl(platform, url) || null,
       };
@@ -78,6 +93,38 @@ function normalize(platform, rawItems) {
       seen.add(k);
       return true;
     });
+}
+
+// oEmbed で検索結果を補強する：
+//   X      → ポスト本文をタイトルに、投稿者表示名を付与
+//   TikTok → 実サムネイル・動画説明文・投稿者名を付与
+// （Instagram は oEmbed 不可のためそのまま）
+const ENRICH_LIMIT = 8;
+
+async function enrichItems(platform, items) {
+  if (platform === 'instagram') return items;
+  await Promise.allSettled(
+    items.slice(0, ENRICH_LIMIT).map(async (item) => {
+      const oe = await fetchOembed(platform, item.url, { timeoutMs: 4000 });
+      if (!oe) return;
+      if (platform === 'x') {
+        if (oe.title) {
+          item.title = oe.title;   // ポスト本文
+          item.snippet = '';       // 検索エンジンの断片は不要になる
+        }
+        if (oe.authorName) {
+          item.authorName = item.authorName ? `${oe.authorName}（${item.authorName}）` : oe.authorName;
+        }
+      } else if (platform === 'tiktok') {
+        if (oe.title) item.title = oe.title;
+        if (oe.thumbnailUrl) item.thumbnailUrl = oe.thumbnailUrl;
+        if (oe.authorName) item.authorName = oe.authorName;
+        if (oe.videoId) item.tiktokVideoId = oe.videoId;
+        item.snippet = '';
+      }
+    })
+  );
+  return items;
 }
 
 // ---------- プロバイダ実装 ----------
@@ -175,7 +222,7 @@ export default async function handler(req, res) {
       : provider === 'brave' ? await searchBrave(platform, topic)
       : await searchGoogleCse(platform, topic);
 
-    const items = normalize(platform, raw);
+    const items = await enrichItems(platform, normalize(platform, raw));
     return res.status(200).json({ items, provider, query: topic });
   } catch (err) {
     console.error('sns-search error:', err);
