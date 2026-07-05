@@ -6,10 +6,15 @@
 //
 // 必要な環境変数：
 //   GOOGLE_CSE_CX  … Programmable Search Engine の検索エンジン ID（cx）
-//                    https://programmablesearchengine.google.com/ で「ウェブ全体を検索」で作成
+//                    https://programmablesearchengine.google.com/ で作成。
+//                    「検索するサイト」に x.com/* ・ *.tiktok.com/* ・ *.instagram.com/* を登録する
+//                    （「ウェブ全体を検索」は不要。サイト指定型エンジンで動作する）
 //   GOOGLE_CSE_KEY … Custom Search API を有効化した API キー
 //                    （未設定なら YOUTUBE_API_KEY を流用。同じ Google Cloud プロジェクトで
 //                      「Custom Search API」を有効にしておくこと）
+//
+// サイト絞り込みは q の site: 演算子ではなく siteSearch パラメータで行うため、
+// エンジンが「特定サイト型」でも「ウェブ全体型」でも同じように動く。
 
 import { MEMBER_ALIASES } from '../src/searchDict.js';
 
@@ -78,7 +83,6 @@ export default async function handler(req, res) {
   const input = (userInput || '').trim();
   const topic = [memberName, input].filter(Boolean).join(' ');
   const q = [
-    `site:${rule.site}`,
     rule.extra,
     topic || '撮可',
     // グループ名で必ず絞る（無関係な投稿を除外）
@@ -90,6 +94,9 @@ export default async function handler(req, res) {
     num: '10',
     lr: 'lang_ja',
     safe: 'active',
+    // プラットフォームのサイト内に限定（エンジン設定に依存しない）
+    siteSearch: rule.site,
+    siteSearchFilter: 'i',
   });
   const dateRestrict = periodToDateRestrict(filters.period);
   if (dateRestrict) params.append('dateRestrict', dateRestrict);
