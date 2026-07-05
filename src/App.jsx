@@ -197,21 +197,21 @@ export default function App() {
 
         {/* メインコラム */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
-          {/* ヘッダー */}
-          <div style={{ background: "linear-gradient(135deg, #1a0a2e 0%, #130c20 50%, #0f0c1a 100%)", borderBottom: `1px solid ${D.border}`, padding: isMobile ? "10px 14px" : "12px 20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          {/* ヘッダー（PWA のステータスバー下に潜り込まないよう safe-area を確保） */}
+          <div style={{ background: "linear-gradient(135deg, #1a0a2e 0%, #130c20 50%, #0f0c1a 100%)", borderBottom: `1px solid ${D.border}`, padding: isMobile ? "calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px" : "12px 20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             {isMobile && (
-              <div>
+              <div style={{ flexShrink: 0 }}>
                 <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "0.1em", background: "linear-gradient(120deg, #f472b6 0%, #a855f7 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>TORCA</div>
                 <div style={{ fontSize: 8, color: D.textMuted, lineHeight: 1.4 }}>💛💜🩷❤️ きゅるしてのための撮可アーカイブ</div>
               </div>
             )}
             {(tab !== "home" || viewMember) && (
-              <div style={{ fontSize: 14, fontWeight: 800, color: D.text, flex: 1, textAlign: isMobile ? "center" : "left" }}>
+              <div style={{ fontSize: isMobile ? 12 : 14, fontWeight: 800, color: D.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: isMobile ? "center" : "left" }}>
                 {viewMember ? `📷 ${findMember(viewArtist, viewMember)?.name}` :
                  tab === "my" ? "💖 推し" : tabTitles[tab]}
               </div>
             )}
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
               {isLegalTab && (
                 <button onClick={() => navigateTo("home")}
                   style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>← 戻る</button>

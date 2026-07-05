@@ -134,7 +134,7 @@ export default function SettingsTab({ onChangePush }) {
       </Section>
 
       <div style={{ textAlign: 'center', fontSize: 10, color: D.textMuted, lineHeight: 1.8, marginTop: 18 }}>
-        TORCA v2.1<br />
+        TORCA v2.2<br />
         きゅるしてのための撮可アーカイブ 💛💜🩷❤️
       </div>
     </div>

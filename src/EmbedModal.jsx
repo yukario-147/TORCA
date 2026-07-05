@@ -1,9 +1,22 @@
 // src/EmbedModal.jsx
 // X / TikTok ポストのアプリ内埋め込みビューア
-// 各プラットフォームの公式埋め込み（oEmbed / 公式 iframe）のみを使用し、動画はホスティングしない
+// 各プラットフォームの「公式埋め込み iframe」を直接使う方式。
+// widgets.js 等の外部スクリプトに依存しないため、広告ブロッカーや読み込み順の影響を受けにくい。
 
 import { useState, useEffect, useRef } from 'react';
 import { D } from './theme.js';
+
+// X の URL からステータス ID を抽出
+function xStatusId(url) {
+  const m = (url || '').match(/status(?:es)?\/(\d+)/);
+  return m ? m[1] : null;
+}
+
+// TikTok URL から動画 ID を抽出
+function tiktokVideoId(url) {
+  const m = (url || '').match(/\/video\/(\d+)/);
+  return m ? m[1] : null;
+}
 
 function loadScript(src) {
   return new Promise((resolve) => {
@@ -17,49 +30,60 @@ function loadScript(src) {
   });
 }
 
-// TikTok URL から動画 ID を抽出（公式 embed iframe 用）
-function tiktokVideoId(url) {
-  const m = (url || '').match(/\/video\/(\d+)/);
-  return m ? m[1] : null;
-}
-
+// X：公式埋め込み iframe（platform.twitter.com/embed/Tweet.html）
 function XEmbed({ url, onFail }) {
-  const ref = useRef(null);
-  const [loading, setLoading] = useState(true);
+  const id = xStatusId(url);
+  const [oembedHtml, setOembedHtml] = useState(null);
+  const blockquoteRef = useRef(null);
 
+  // ID が取れない短縮 URL 等は oEmbed の blockquote にフォールバック
   useEffect(() => {
+    if (id) return;
     let alive = true;
     (async () => {
       try {
         const r = await fetch(`/api/oembed?url=${encodeURIComponent(url)}&platform=x`);
         const data = r.ok ? await r.json() : null;
         if (!alive) return;
-        if (!data?.html) { onFail(); return; }
-        if (ref.current) {
-          ref.current.innerHTML = data.html.includes('data-theme')
-            ? data.html
-            : data.html.replace('<blockquote class="twitter-tweet"', '<blockquote class="twitter-tweet" data-theme="dark"');
-        }
-        await loadScript('https://platform.twitter.com/widgets.js');
-        if (alive && window.twttr?.widgets && ref.current) {
-          await window.twttr.widgets.load(ref.current);
-        }
-        if (alive) setLoading(false);
+        if (data?.html) setOembedHtml(data.html);
+        else onFail();
       } catch {
         if (alive) onFail();
       }
     })();
     return () => { alive = false; };
-  }, [url, onFail]);
+  }, [id, url, onFail]);
 
-  return (
-    <div>
-      {loading && <div style={{ textAlign: 'center', padding: 30, color: D.textSub, fontSize: 12 }}>ポストを読み込み中…</div>}
-      <div ref={ref} style={{ display: 'flex', justifyContent: 'center' }} />
-    </div>
-  );
+  useEffect(() => {
+    if (!oembedHtml || !blockquoteRef.current) return;
+    blockquoteRef.current.innerHTML = oembedHtml.replace(
+      '<blockquote class="twitter-tweet"',
+      '<blockquote class="twitter-tweet" data-theme="dark"'
+    );
+    loadScript('https://platform.twitter.com/widgets.js').then(() => {
+      window.twttr?.widgets?.load(blockquoteRef.current);
+    });
+  }, [oembedHtml]);
+
+  if (id) {
+    return (
+      <iframe
+        src={`https://platform.twitter.com/embed/Tweet.html?id=${id}&theme=dark&dnt=true&lang=ja`}
+        style={{
+          width: '100%', maxWidth: 550, height: 'min(72vh, 620px)',
+          border: 'none', borderRadius: 14, display: 'block', margin: '0 auto',
+          background: '#0c0c12',
+        }}
+        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+        allowFullScreen
+        title="X post"
+      />
+    );
+  }
+  return <div ref={blockquoteRef} style={{ display: 'flex', justifyContent: 'center' }} />;
 }
 
+// TikTok：公式埋め込み iframe（tiktok.com/embed/v2）
 function TikTokEmbed({ url, onFail }) {
   const id = tiktokVideoId(url);
   useEffect(() => { if (!id) onFail(); }, [id, onFail]);
@@ -67,8 +91,12 @@ function TikTokEmbed({ url, onFail }) {
   return (
     <iframe
       src={`https://www.tiktok.com/embed/v2/${id}`}
-      style={{ width: '100%', maxWidth: 340, height: 580, border: 'none', borderRadius: 12, display: 'block', margin: '0 auto', background: '#000' }}
-      allow="autoplay; encrypted-media; fullscreen"
+      style={{
+        width: '100%', maxWidth: 340, height: 'min(76vh, 600px)',
+        border: 'none', borderRadius: 14, display: 'block', margin: '0 auto',
+        background: '#000',
+      }}
+      allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
       allowFullScreen
       title="TikTok"
     />
@@ -91,11 +119,14 @@ export default function EmbedModal({ item, onClose }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: 'fixed', inset: 0, zIndex: 9500,
-        background: 'rgba(6,6,12,0.95)', display: 'flex', flexDirection: 'column',
+        background: 'rgba(6,6,12,0.97)', display: 'flex', flexDirection: 'column',
         animation: 'pageIn 0.2s cubic-bezier(0.4,0,0.2,1)',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', flexShrink: 0 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
+        padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px',
+      }}>
         <span style={{ fontSize: 12, fontWeight: 800, color: D.accentLight }}>{platformLabel}</span>
         <div style={{ flex: 1 }} />
         <a href={item.url} target="_blank" rel="noopener noreferrer"
@@ -109,7 +140,7 @@ export default function EmbedModal({ item, onClose }) {
         }}>✕ 閉じる</button>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 14px 30px', minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 14px calc(env(safe-area-inset-bottom, 0px) + 30px)', minHeight: 0 }}>
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           {failed ? (
             <div style={{ textAlign: 'center', padding: '50px 20px' }}>

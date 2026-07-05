@@ -54,13 +54,6 @@ export const PERIODS_FILTER = [
   { id: 'week', label: '直近1週間' },
 ];
 
-export const SNS_PLATFORMS = [
-  { id: 'youtube', label: 'YouTube', icon: '▶', color: '#FF0000' },
-  { id: 'x',       label: 'X (Twitter)', icon: '✕', color: '#1DA1F2' },
-  { id: 'tiktok',  label: 'TikTok', icon: '♪', color: '#69C9D0' },
-  { id: 'instagram',label: 'Instagram', icon: '◎', color: '#E1306C' },
-];
-
 export const PLATFORM_CONFIG = {
   youtube:   { label: 'YouTube', icon: '▶', color: '#FF0000' },
   x:         { label: 'X',       icon: '✕', color: '#1DA1F2' },

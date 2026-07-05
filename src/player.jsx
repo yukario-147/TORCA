@@ -137,8 +137,8 @@ function PlayerModal({ queue, index, setIndex, onClose }) {
       background: 'rgba(6,6,12,0.97)', display: 'flex', flexDirection: 'column',
       animation: 'pageIn 0.2s cubic-bezier(0.4,0,0.2,1)',
     }}>
-      {/* ヘッダー */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', flexShrink: 0 }}>
+      {/* ヘッダー（safe-area 対応） */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 16px 12px', flexShrink: 0 }}>
         <span style={{ fontSize: 12, fontWeight: 800, color: D.accentLight }}>📺 撮可シアター</span>
         <span style={{ fontSize: 11, color: D.textSub }}>{index + 1} / {queue.length}</span>
         <div style={{ flex: 1 }} />
@@ -150,7 +150,7 @@ function PlayerModal({ queue, index, setIndex, onClose }) {
       </div>
 
       {/* プレイヤー本体 */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 12px', minHeight: 0, overflowY: 'auto' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '0 12px calc(env(safe-area-inset-bottom, 0px) + 8px)', minHeight: 0, overflowY: 'auto' }}>
         <div style={{ width: '100%', maxWidth: 860 }}>
           <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#000', borderRadius: 14, overflow: 'hidden', border: `1px solid ${D.border}` }}>
             {/* YT.Player がこの div を iframe に置き換える */}
