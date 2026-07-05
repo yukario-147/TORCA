@@ -2,7 +2,7 @@
 // アプリシェルをキャッシュしてオフライン起動と再訪の高速化を実現する。
 // /api はキャッシュしない（常にネットワーク）。
 
-const CACHE = 'torca-v2.3.0';
+const CACHE = 'torca-v2.3.1';
 
 self.addEventListener('install', () => {
   self.skipWaiting();

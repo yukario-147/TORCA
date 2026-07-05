@@ -697,8 +697,8 @@ export default function SearchTab({ sharedUrl }) {
           <div style={{ fontSize: 26, marginBottom: 8 }}>🔧</div>
           <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 6 }}>SNS横断検索は準備中です</div>
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.7, marginBottom: 12 }}>
-            運営向け：Google Programmable Search Engine を作成し、<br />
-            Vercel に <code>GOOGLE_CSE_CX</code> を設定すると有効になります
+            運営向け：Vercel の環境変数に <code>TAVILY_API_KEY</code> を<br />
+            設定すると有効になります（app.tavily.com で無料取得）
           </div>
           <a href={externalUrl} target="_blank" rel="noopener noreferrer"
             style={{ display: 'inline-block', background: 'linear-gradient(135deg, var(--accent), var(--accent2))', borderRadius: 10, padding: '9px 18px', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
