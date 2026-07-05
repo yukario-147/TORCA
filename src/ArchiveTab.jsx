@@ -6,12 +6,14 @@ import { MEMBERS_FILTER, PLATFORM_CONFIG } from './data.js';
 import { loadJSON, saveJSON, KEYS, buildShareCode, parseShareCode, mergeShareData } from './storage.js';
 import { usePlayer } from './playerContext.js';
 import { PlayAllButton } from './components.jsx';
+import EmbedModal from './EmbedModal.jsx';
 
 export default function ArchiveTab() {
   const [memberFilter, setMemberFilter] = useState('all');
   const [platformFilter, setPlatformFilter] = useState('all');
   const [refreshKey, setRefreshKey] = useState(0);
   const [sharePanel, setSharePanel] = useState(null); // null | 'export' | 'import'
+  const [embedItem, setEmbedItem] = useState(null);
   const [shareCode, setShareCode] = useState('');
   const [importCode, setImportCode] = useState('');
   const [shareMsg, setShareMsg] = useState('');
@@ -55,11 +57,18 @@ export default function ArchiveTab() {
       publishedAt: '',
     }));
 
-  const openInPlayer = (item, e) => {
-    if (!player || !item.videoId) return; // YouTube 以外は外部リンクへ
-    e.preventDefault();
-    const idx = playQueue.findIndex(q => q.videoId === item.videoId);
-    player.openPlayer(playQueue, Math.max(0, idx));
+  // タップ時の挙動：YouTube → 撮可シアター / X・TikTok → アプリ内埋め込み / それ以外 → 外部リンク
+  const openItem = (item, e) => {
+    if (item.videoId && player) {
+      e.preventDefault();
+      const idx = playQueue.findIndex(q => q.videoId === item.videoId);
+      player.openPlayer(playQueue, Math.max(0, idx));
+      return;
+    }
+    if (item.platform === 'x' || item.platform === 'tiktok') {
+      e.preventDefault();
+      setEmbedItem(item);
+    }
   };
 
   const removeItem = (item) => {
@@ -133,6 +142,7 @@ export default function ArchiveTab() {
 
   return (
     <div key={refreshKey} style={{ padding: '0 0 80px 0' }}>
+      {embedItem && <EmbedModal item={embedItem} onClose={() => setEmbedItem(null)} />}
       <div style={{ padding: '16px 16px 0' }}>
         <h2 style={{
           fontSize: 20, fontWeight: 800, margin: '0 0 4px',
@@ -290,7 +300,7 @@ export default function ArchiveTab() {
                 border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
               }}>
                 <a href={item.url} target="_blank" rel="noopener noreferrer"
-                  onClick={(e) => openInPlayer(item, e)}
+                  onClick={(e) => openItem(item, e)}
                   style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}>
                   {item.thumbnailUrl ? (
                     <img src={item.thumbnailUrl} alt={item.title || item.note || ''} style={{ width: 120, height: 68, objectFit: 'cover', flexShrink: 0 }} />

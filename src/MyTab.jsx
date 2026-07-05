@@ -1,26 +1,21 @@
 // src/MyTab.jsx
-// 推しタブ：推しメンバーのパーソナライズ画面 + 実データの最新クリップ
+// 推しタブ：推しメンバーのパーソナライズ画面 + 実データの最新クリップ + 推し活ダッシュボード
 
 import { useEffect } from "react";
 import { D, DEFAULT_ACCENT, applyAccent } from "./theme.js";
 import { KYURUSHITE, findMember } from "./data.js";
-import { VideoCard } from "./components.jsx";
 import { MemberFeed } from "./pages.jsx";
 import { loadJSON, KEYS, oshiDays } from "./storage.js";
 import { nextEvent, daysUntil } from "./events.js";
+import { xUrl, tkUrl } from "./data.js";
 
-export default function MyTab({ profile, videos, onSelectVideo, onSelectMember, onSave, saved, onChangePush }) {
+export default function MyTab({ profile, onSelectMember, onChangePush }) {
   const myMember = profile.memberId ? findMember("kyurushite", profile.memberId) : null;
   const accentColor = myMember?.color || DEFAULT_ACCENT;
 
   useEffect(() => {
     applyAccent(accentColor);
   }, [accentColor]);
-
-  const memberVideos = myMember
-    ? videos.filter(v => v.artistId === "kyurushite" && v.focusMemberId === myMember.id)
-    : [];
-  const groupVideos = videos.filter(v => v.artistId === "kyurushite");
 
   // 推し活ダッシュボード
   const days = myMember ? oshiDays(myMember.id) : null;
@@ -64,37 +59,30 @@ export default function MyTab({ profile, videos, onSelectVideo, onSelectMember, 
         ))}
       </div>
 
-      {myMember && (
+      {myMember ? (
         <>
           <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>📡 {myMember.name}の最新クリップ</div>
-          <MemberFeed member={myMember} limit={5} />
+          <MemberFeed member={myMember} limit={8} />
 
-          {memberVideos.length > 0 && (
-            <>
-              <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>📷 {myMember.name}の推しカメラ <span style={{ fontSize: 10, color: D.textMuted, fontWeight: 400 }}>{memberVideos.length}件</span></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 22 }}>
-                {memberVideos.map(v => <VideoCard key={v.id} v={v} onSelect={onSelectVideo} onSave={onSave} isSaved={saved.includes(v.id)} showFocus={false} />)}
-              </div>
-            </>
-          )}
-        </>
-      )}
-
-      <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>🎥 きゅるして全クリップ <span style={{ fontSize: 10, color: D.textMuted, fontWeight: 400 }}>{groupVideos.length}件</span></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-        {groupVideos.map(v => <VideoCard key={v.id} v={v} onSelect={onSelectVideo} onSave={onSave} isSaved={saved.includes(v.id)} />)}
-      </div>
-
-      {videos.filter(v => saved.includes(v.id)).length > 0 && (
-        <>
-          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>♥ 保存したクリップ <span style={{ fontSize: 10, color: D.textMuted, fontWeight: 400 }}>{videos.filter(v => saved.includes(v.id)).length}件</span></div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
-            {videos.filter(v => saved.includes(v.id)).map(v => <VideoCard key={v.id} v={v} onSelect={onSelectVideo} onSave={onSave} isSaved={true} />)}
+          {/* SNS で推しを直接探す導線 */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 22 }}>
+            <a href={xUrl(`${myMember.name} (推しカメラ OR 撮可) filter:native_video`)} target="_blank" rel="noopener noreferrer"
+              style={{ flex: 1, textAlign: "center", background: "rgba(29,161,242,0.1)", border: "1px solid rgba(29,161,242,0.3)", borderRadius: 10, padding: "9px 8px", color: "#1DA1F2", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+              𝕏 で{myMember.nickname.split(" /")[0]}の撮可 ↗
+            </a>
+            <a href={tkUrl(`${myMember.name} 推しカメラ`)} target="_blank" rel="noopener noreferrer"
+              style={{ flex: 1, textAlign: "center", background: "rgba(105,201,208,0.1)", border: "1px solid rgba(105,201,208,0.3)", borderRadius: 10, padding: "9px 8px", color: "#69C9D0", fontSize: 11, fontWeight: 700, textDecoration: "none" }}>
+              ♪ TikTokで探す ↗
+            </a>
           </div>
         </>
+      ) : (
+        <div style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 14, padding: "16px", marginBottom: 22, textAlign: "center", color: D.textSub, fontSize: 12, lineHeight: 1.7 }}>
+          推しメンバーを選ぶと、専用フィードとテーマカラーが有効になります 💫
+        </div>
       )}
 
-      <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>💗 メンバーで絞り込む</div>
+      <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>💗 メンバーページ</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
         {KYURUSHITE.members.map(m => {
           const active = m.id === myMember?.id;

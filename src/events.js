@@ -2,41 +2,22 @@
 // ライブ・イベントスケジュール
 //
 // ★運営が編集するファイル★
-// 公式サイト https://www.kyurushite.com/ の最新スケジュールに合わせて EVENTS を更新してください。
-// sample: true の項目は UI に「サンプル」バッジが表示されます。実データに差し替えたら false に。
+// 公式サイト https://www.kyurushite.com/ の最新スケジュールを確認して EVENTS に追記してください。
+// 情報の正確性を守るため、確認が取れていないイベントは絶対に載せないこと。
+// 未確認の項目を暫定で載せる場合は sample: true を付けると「未確認」バッジが表示されます。
+//
+// 記入例：
+// {
+//   id: 'oneman-2026-09',            // 一意なID
+//   date: '2026-09-22',              // YYYY-MM-DD
+//   title: 'ワンマンライブ タイトル',
+//   venue: 'Kアリーナ横浜',
+//   kind: 'ワンマン',                 // ワンマン | 対バン | リリイベ | フェス
+//   takaInfo: '未発表',               // 撮可情報（公式発表があれば転記）
+//   url: 'https://www.kyurushite.com/', // 詳細ページ
+// },
 
-export const EVENTS = [
-  {
-    id: 'summer-fes-2026',
-    date: '2026-07-26',
-    title: 'サマーアイドル博 2026',
-    venue: 'Zepp DiverCity (TOKYO)',
-    kind: '対バン',
-    takaInfo: '未発表',
-    url: 'https://www.kyurushite.com/',
-    sample: true,
-  },
-  {
-    id: 'release-event-2026',
-    date: '2026-08-30',
-    title: '5thミニアルバム リリースイベント',
-    venue: 'タワーレコード渋谷',
-    kind: 'リリイベ',
-    takaInfo: '未発表',
-    url: 'https://www.kyurushite.com/',
-    sample: true,
-  },
-  {
-    id: 'k-arena-2026',
-    date: '2026-09-22',
-    title: 'きゅるりんってしてみて ワンマンライブ',
-    venue: 'Kアリーナ横浜',
-    kind: 'ワンマン',
-    takaInfo: '未発表',
-    url: 'https://www.kyurushite.com/',
-    sample: true,
-  },
-];
+export const EVENTS = [];
 
 const dayMs = 24 * 60 * 60 * 1000;
 

@@ -31,7 +31,44 @@ export default async function handler(req, res) {
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'YouTube API key not configured' });
 
-  const { userInput = '', filters = {}, order = 'relevance' } = req.body || {};
+  const { userInput = '', filters = {}, order = 'relevance', channelId = null } = req.body || {};
+
+  // channelId 指定時：公式チャンネルの最新動画フィード（Gemini スコアリング不要）
+  if (channelId) {
+    try {
+      const params = new URLSearchParams({
+        part: 'snippet',
+        type: 'video',
+        channelId,
+        maxResults: '10',
+        order: 'date',
+        key: apiKey,
+      });
+      const response = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
+      if (!response.ok) {
+        const err = await response.json();
+        return res.status(502).json({ error: 'YouTube API error', detail: err });
+      }
+      const data = await response.json();
+      const items = (data.items || []).map(item => ({
+        videoId: item.id?.videoId,
+        title: item.snippet?.title || '',
+        description: item.snippet?.description || '',
+        channelTitle: item.snippet?.channelTitle || '',
+        channelId: item.snippet?.channelId || '',
+        thumbnailUrl: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || '',
+        publishedAt: item.snippet?.publishedAt || '',
+        viewCount: 0,
+        isOfficial: true,
+        takaScore: null,
+        takaReason: null,
+      })).filter(v => v.videoId);
+      return res.status(200).json({ items, totalQueried: 1, totalDeduplicated: items.length, geminiUsed: false });
+    } catch (err) {
+      console.error('channel feed error:', err);
+      return res.status(500).json({ error: 'channel feed failed' });
+    }
+  }
 
   // userInput・filters がすべて空の場合は expandQueries が
   // 「きゅるして 撮可」系のデフォルトクエリを返す（ホームのフィード取得に使用）

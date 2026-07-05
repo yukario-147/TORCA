@@ -42,7 +42,7 @@ function EventCard({ ev, highlight = false }) {
         <KindBadge kind={ev.kind} />
         {ev.sample && (
           <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}>
-            サンプル
+            未確認
           </span>
         )}
         <span style={{ fontSize: 11, color: D.textSub, fontWeight: 700 }}>{formatEventDate(ev.date)}</span>
@@ -100,8 +100,26 @@ export default function LiveTab() {
           </div>
         </div>
       ) : (
-        <div style={{ background: 'var(--bg-card)', border: `1px solid ${D.border}`, borderRadius: 14, padding: 20, textAlign: 'center', color: D.textMuted, fontSize: 12, marginBottom: 18 }}>
-          予定されているイベント情報がありません。公式サイトをチェックしよう。
+        <div style={{ background: 'var(--bg-card)', border: `1px solid ${D.border}`, borderRadius: 14, padding: '22px 18px', textAlign: 'center', marginBottom: 18 }}>
+          <div style={{ fontSize: 30, marginBottom: 10 }}>🎪</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: D.text, marginBottom: 6 }}>登録済みのイベント情報がありません</div>
+          <div style={{ fontSize: 11, color: D.textSub, lineHeight: 1.7, marginBottom: 14 }}>
+            最新のスケジュール・チケット情報は公式の発信をチェック！
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <a href="https://www.kyurushite.com/" target="_blank" rel="noopener noreferrer"
+              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))', borderRadius: 10, padding: '9px 16px', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+              🌐 公式サイト ↗
+            </a>
+            <a href="https://x.com/KYURUSHITE" target="_blank" rel="noopener noreferrer"
+              style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${D.border}`, borderRadius: 10, padding: '9px 16px', color: D.text, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+              𝕏 公式アカウント ↗
+            </a>
+            <a href="https://x.com/search?q=from%3AKYURUSHITE%20(%E3%83%A9%E3%82%A4%E3%83%96%20OR%20%E3%83%81%E3%82%B1%E3%83%83%E3%83%88%20OR%20%E5%87%BA%E6%BC%94)&f=live" target="_blank" rel="noopener noreferrer"
+              style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${D.border}`, borderRadius: 10, padding: '9px 16px', color: D.text, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+              📅 公式のライブ告知を検索 ↗
+            </a>
+          </div>
         </div>
       )}
 

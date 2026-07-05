@@ -2,7 +2,7 @@
 // 検索タブ：YouTube 並列検索 + AI スコアリング + SNS 導線 + URL の AI 自動登録
 
 import { useState } from 'react';
-import { buildQuery, buildSnsUrls, MEMBER_ALIASES } from './searchDict.js';
+import { buildQuery, buildSnsUrls, buildXRecipes, buildTagLinks, MEMBER_ALIASES } from './searchDict.js';
 import { MEMBERS_FILTER, VENUES_FILTER, PERIODS_FILTER, SNS_PLATFORMS } from './data.js';
 import { ClipRow } from './components.jsx';
 import {
@@ -90,7 +90,13 @@ function filterByMember(items, member) {
   });
 }
 
-export default function SearchTab() {
+// YouTube URL から videoId を抽出（watch / youtu.be / shorts 対応）
+function extractYouTubeId(url) {
+  const m = (url || '').match(/(?:youtube\.com\/(?:watch\?.*v=|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+export default function SearchTab({ sharedUrl }) {
   const [query, setQuery] = useState('');
   const [memberFilter, setMemberFilter] = useState('all');
   const [venueFilter, setVenueFilter] = useState('');
@@ -104,8 +110,10 @@ export default function SearchTab() {
   const [snsUrls, setSnsUrls] = useState({});
   const [detectedInfo, setDetectedInfo] = useState(null);
   const { toggle: toggleBookmark, has: isBookmarked } = useBookmarks();
-  const [archiveOpen, setArchiveOpen] = useState(false);
-  const [archiveUrl, setArchiveUrl] = useState('');
+  // Web Share Target：X / TikTok アプリの共有シートから渡された URL があれば
+  // アーカイブ欄を開いた状態で初期化する
+  const [archiveOpen, setArchiveOpen] = useState(() => !!sharedUrl);
+  const [archiveUrl, setArchiveUrl] = useState(() => sharedUrl || '');
   const [archiveMember, setArchiveMember] = useState('');
   const [archiveNote, setArchiveNote] = useState('');
   const [archiveSaving, setArchiveSaving] = useState(false);
@@ -115,6 +123,7 @@ export default function SearchTab() {
   const [searchStats, setSearchStats] = useState(null);
   const [history, setHistory] = useState(getSearchHistory);
   const [pinned, setPinned] = useState(getPinnedSearches);
+
 
   const togglePlatform = (id) => {
     setActivePlatforms(prev =>
@@ -200,6 +209,7 @@ export default function SearchTab() {
     if (url.includes('x.com') || url.includes('twitter.com')) return 'x';
     if (url.includes('tiktok.com')) return 'tiktok';
     if (url.includes('instagram.com')) return 'instagram';
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
     return null;
   };
 
@@ -208,7 +218,7 @@ export default function SearchTab() {
     if (!trimmed) return;
     const platform = detectPlatform(trimmed);
     if (!platform) {
-      setArchiveMsg('X、TikTok、Instagram の URL を入力してください');
+      setArchiveMsg('X、TikTok、Instagram、YouTube の URL を入力してください');
       setTimeout(() => setArchiveMsg(''), 3000);
       return;
     }
@@ -226,6 +236,7 @@ export default function SearchTab() {
       song: null,
       venue: null,
       aiDetected: false,
+      videoId: platform === 'youtube' ? extractYouTubeId(trimmed) : null,
     };
     if (platform !== 'instagram') {
       try {
@@ -421,7 +432,7 @@ export default function SearchTab() {
             }}
           >
             <span style={{ transform: archiveOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
-            X / TikTok / Instagram の URL をアーカイブ（🤖 AI自動登録）
+            X / TikTok / Instagram / YouTube の URL をアーカイブ（🤖 AI自動登録）
           </button>
           {archiveOpen && (
             <div style={{ marginTop: 10, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
@@ -431,7 +442,7 @@ export default function SearchTab() {
                   value={archiveUrl}
                   onChange={e => setArchiveUrl(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && saveToArchive()}
-                  placeholder="https://x.com/... または tiktok.com/..."
+                  placeholder="https://x.com/... / tiktok.com/... / youtu.be/..."
                   style={{
                     flex: 1, padding: '9px 12px', borderRadius: 8,
                     border: '1.5px solid var(--border-subtle)', background: '#0c0c12',
@@ -497,39 +508,70 @@ export default function SearchTab() {
         </div>
       </div>
 
-      {searched && Object.keys(snsUrls).length > 0 && (
-        <div style={{
-          margin: '0 16px 16px', padding: '12px 14px', borderRadius: 10,
-          background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
-        }}>
-          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8 }}>
-            各SNSで同じクエリを検索する
-            {detectedInfo?.detectedMembers?.length > 0 && (
-              <span style={{ marginLeft: 8, color: 'var(--accent-light)' }}>
-                📍 {detectedInfo.detectedMembers[0]}
-              </span>
-            )}
+      {searched && (() => {
+        const filters = {
+          member: memberFilter !== 'all' ? memberFilter : null,
+          venue: venueFilter || null,
+          period: periodFilter,
+        };
+        const recipes = buildXRecipes(detectedInfo?.youtubeQuery || query, filters);
+        const tagLinks = buildTagLinks(detectedInfo?.youtubeQuery || query, filters);
+        const linkChip = (color) => ({
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '5px 12px', borderRadius: 20,
+          background: `${color}18`, border: `1px solid ${color}40`,
+          color, fontSize: 11, fontWeight: 600, textDecoration: 'none',
+        });
+        return (
+          <div style={{
+            margin: '0 16px 16px', padding: '12px 14px', borderRadius: 10,
+            background: 'var(--bg-card)', border: '1px solid var(--border-subtle)',
+          }}>
+            {/* X 検索レシピ：検索演算子で絞り込んだ実用リンク */}
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 700 }}>
+              𝕏 で撮可を探す
+              {detectedInfo?.detectedMembers?.length > 0 && (
+                <span style={{ marginLeft: 8, color: 'var(--accent-light)', fontWeight: 400 }}>
+                  📍 {detectedInfo.detectedMembers[0]}
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+              {recipes.map(r => (
+                <a key={r.label} href={r.url} target="_blank" rel="noopener noreferrer"
+                  title={r.desc} style={linkChip('#1DA1F2')}>
+                  {r.label} ↗
+                </a>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 700 }}>
+              タグページ・他のSNS
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {tagLinks.tiktok.map(t => (
+                <a key={'tk' + t.label} href={t.url} target="_blank" rel="noopener noreferrer"
+                  style={linkChip('#69C9D0')}>♪ {t.label} ↗</a>
+              ))}
+              {snsUrls.tiktok && (
+                <a href={snsUrls.tiktok} target="_blank" rel="noopener noreferrer"
+                  style={linkChip('#69C9D0')}>♪ TikTok検索 ↗</a>
+              )}
+              {tagLinks.instagram.map(t => (
+                <a key={'ig' + t.label} href={t.url} target="_blank" rel="noopener noreferrer"
+                  style={linkChip('#E1306C')}>◎ {t.label} ↗</a>
+              ))}
+              {snsUrls.youtube && (
+                <a href={snsUrls.youtube} target="_blank" rel="noopener noreferrer"
+                  style={linkChip('#FF0000')}>▶ YouTube検索 ↗</a>
+              )}
+            </div>
+            <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 10, lineHeight: 1.5 }}>
+              💡 X・TikTokで見つけた撮可は、投稿の「共有」からTORCAに送るか、URLを下の「アーカイブ」に貼るとAIが自動整理します
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {SNS_PLATFORMS.filter(p => snsUrls[p.id]).map(p => (
-              <a
-                key={p.id}
-                href={snsUrls[p.id]}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '6px 14px', borderRadius: 20,
-                  background: `${p.color}22`, border: `1px solid ${p.color}44`,
-                  color: p.color, fontSize: 12, fontWeight: 600, textDecoration: 'none',
-                }}
-              >
-                {p.icon} {p.label}で開く
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {searched && !loading && results.length > 0 && (
         <div style={{ padding: '0 16px', marginBottom: 10 }}>

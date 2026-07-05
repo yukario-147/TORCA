@@ -1,14 +1,15 @@
 // src/App.jsx
-// アプリシェル：ナビゲーション・レイアウト・オンボーディング制御
-// 各画面は src/HomeTab.jsx / MyTab.jsx / SearchTab.jsx / ArchiveTab.jsx / pages.jsx / LegalTabs.jsx に分割
+// アプリシェル：ナビゲーション・レイアウト・オンボーディング・Web Share Target 受信
+// 各画面は src/HomeTab.jsx / MyTab.jsx / SearchTab.jsx / ArchiveTab.jsx / LiveTab.jsx 等に分割
 
 import { useState, useEffect } from "react";
 import Onboarding from './Onboarding.jsx';
 import Splash from './Splash.jsx';
-import { INITIAL_VIDEOS, findArtist, findMember } from './data.js';
+import { findMember } from './data.js';
 import { D, DEFAULT_ACCENT, DEFAULT_ACCENT_RGB, ACCENT_RGB_MAP, applyAccent, useBreakpoint } from './theme.js';
 import { Footer } from './components.jsx';
-import { ArtistPage, MemberPage, DetailView } from './pages.jsx';
+import { MemberPage } from './pages.jsx';
+import { KYURUSHITE, findArtist } from './data.js';
 import HomeTab from './HomeTab.jsx';
 import MyTab from './MyTab.jsx';
 import SearchTab from './SearchTab.jsx';
@@ -17,18 +18,35 @@ import LiveTab from './LiveTab.jsx';
 import SettingsTab from './SettingsTab.jsx';
 import { TermsTab, PrivacyTab, AboutTab, TakedownTab } from './LegalTabs.jsx';
 import { PlayerProvider } from './player.jsx';
-import { loadJSON, saveJSON, KEYS, recordOshiSince } from './storage.js';
+import { KEYS, recordOshiSince } from './storage.js';
+
+// Web Share Target（PWA）で渡されたパラメータから SNS の URL を取り出す
+function consumeSharedUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const candidates = [params.get('url'), params.get('text'), params.get('title')].filter(Boolean);
+    for (const c of candidates) {
+      const m = c.match(/https?:\/\/[^\s]+/);
+      if (m && /(x\.com|twitter\.com|tiktok\.com|instagram\.com|youtube\.com|youtu\.be)/.test(m[0])) {
+        // URL をクリーンにして再共有時の二重処理を防ぐ
+        window.history.replaceState({}, '', window.location.pathname);
+        return m[0];
+      }
+    }
+    if (candidates.length > 0) window.history.replaceState({}, '', window.location.pathname);
+  } catch { /* URL 解析失敗は無視 */ }
+  return null;
+}
 
 export default function App() {
   const bp = useBreakpoint();
   const isMobile = bp === "mobile";
 
-  const [videos] = useState(INITIAL_VIDEOS);
-  const [tab, setTab] = useState("home");
-  const [selected, setSelected] = useState(null);
+  // Web Share Target 経由で開かれた場合は検索タブ（アーカイブ欄）で起動
+  const [sharedUrl] = useState(() => consumeSharedUrl());
+  const [tab, setTab] = useState(() => (sharedUrl ? "search" : "home"));
   const [viewArtist, setViewArtist] = useState(null);
   const [viewMember, setViewMember] = useState(null);
-  const [saved, setSaved] = useState(() => loadJSON(KEYS.saved, []));
   const [profile, setProfile] = useState(() => ({
     artistId: "kyurushite",
     memberId: localStorage.getItem(KEYS.member) || null,
@@ -72,12 +90,6 @@ export default function App() {
     applyAccent(m?.color || accentColor);
   }, [profile.memberId]);
 
-  const toggleSave = (id) => setSaved(s => {
-    const next = s.includes(id) ? s.filter(x => x !== id) : [...s, id];
-    saveJSON(KEYS.saved, next);
-    return next;
-  });
-
   const setPushMember = (memberId) => {
     if (memberId) {
       localStorage.setItem(KEYS.member, memberId);
@@ -106,12 +118,6 @@ export default function App() {
     setViewMember(null);
   };
 
-  if (selected) return (
-    <div style={{ width: "100vw", height: "100dvh", overflow: "hidden", fontFamily: "'DM Sans', 'Noto Sans JP', -apple-system, sans-serif", animation: "pageIn 0.25s cubic-bezier(0.4,0,0.2,1)" }}>
-      <DetailView v={selected} onBack={() => setSelected(null)} onSave={toggleSave} isSaved={saved.includes(selected.id)} />
-    </div>
-  );
-
   const mainTabs = [
     { key: "home",    icon: "🏠", label: "ホーム" },
     { key: "my",      icon: "💖", label: "推し" },
@@ -135,28 +141,19 @@ export default function App() {
 
   const renderBody = () => {
     if (viewMember && viewArtist) return (
-      <MemberPage artist={findArtist(viewArtist)} member={findMember(viewArtist, viewMember)} videos={videos}
-        onSelectVideo={setSelected} onSave={toggleSave} saved={saved} onBack={() => setViewMember(null)} />
-    );
-    if (viewArtist) return (
-      <ArtistPage artist={findArtist(viewArtist)} videos={videos}
-        onSelectVideo={setSelected} onSelectMember={(mId) => setViewMember(mId)}
-        onSave={toggleSave} saved={saved} onBack={() => setViewArtist(null)} />
+      <MemberPage artist={findArtist(viewArtist) || KYURUSHITE} member={findMember(viewArtist, viewMember)}
+        onBack={() => setViewMember(null)} />
     );
     switch (tab) {
       case "home": return (
-        <HomeTab videos={videos} profile={profile}
-          onSelectVideo={setSelected} onSelectArtist={(id) => setViewArtist(id)}
-          onSave={toggleSave} saved={saved} onGoToMember={goToMember}
-          onGoLive={() => navigateTo("live")} />
+        <HomeTab onGoToMember={goToMember} onGoLive={() => navigateTo("live")} onGoSearch={() => navigateTo("search")} />
       );
       case "my": return (
-        <MyTab profile={profile} videos={videos}
-          onSelectVideo={setSelected}
+        <MyTab profile={profile}
           onSelectMember={(aId, mId) => { setViewArtist(aId); setViewMember(mId); }}
-          onSave={toggleSave} saved={saved} onChangePush={() => { localStorage.removeItem(KEYS.onboarding); setOnboardingDone(false); }} />
+          onChangePush={() => { localStorage.removeItem(KEYS.onboarding); setOnboardingDone(false); }} />
       );
-      case "search":  return <SearchTab />;
+      case "search":  return <SearchTab sharedUrl={sharedUrl} />;
       case "archive": return <ArchiveTab />;
       case "live":    return <LiveTab />;
       case "settings": return <SettingsTab onChangePush={() => { localStorage.removeItem(KEYS.onboarding); setOnboardingDone(false); }} />;
@@ -208,10 +205,9 @@ export default function App() {
                 <div style={{ fontSize: 8, color: D.textMuted, lineHeight: 1.4 }}>💛💜🩷❤️ きゅるしてのための撮可アーカイブ</div>
               </div>
             )}
-            {(tab !== "home" || viewArtist || viewMember) && (
+            {(tab !== "home" || viewMember) && (
               <div style={{ fontSize: 14, fontWeight: 800, color: D.text, flex: 1, textAlign: isMobile ? "center" : "left" }}>
                 {viewMember ? `📷 ${findMember(viewArtist, viewMember)?.name}` :
-                 viewArtist ? `🎵 ${findArtist(viewArtist)?.name}` :
                  tab === "my" ? "💖 推し" : tabTitles[tab]}
               </div>
             )}

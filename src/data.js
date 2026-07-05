@@ -1,5 +1,7 @@
 // src/data.js
 // きゅるして専用データ・定数
+// v2.1: 架空の再生数・いいね数を含むデモ動画データは「情報の正確性」担保のため廃止。
+// 表示データはすべて YouTube Data API / oEmbed 経由の実データのみ。
 
 export const xUrl = (q) => `https://x.com/search?q=${encodeURIComponent(q)}&f=live`;
 export const tkUrl = (q) => `https://www.tiktok.com/search?q=${encodeURIComponent(q)}`;
@@ -27,55 +29,6 @@ export const KYURUSHITE = {
 export const ARTISTS = [KYURUSHITE];
 export const findArtist = (id) => ARTISTS.find(a => a.id === id);
 export const findMember = (artistId, memberId) => findArtist(artistId)?.members.find(m => m.id === memberId);
-
-// API に接続できない場合のフォールバック用デモデータ
-export const INITIAL_VIDEOS = [
-  {
-    id: 1, artistId: "kyurushite", focusMemberId: null, memberIds: ["uta","yane","yuna","amu"],
-    song: "らぶきゅん♡うぉんてっど", venue: "Zepp Nagoya", date: "2025-03-28", quality: "4K", source: "X",
-    sourceUrl: xUrl("#きゅるして撮可"), tags: ["#きゅるして撮可", "#ZeppNagoya"],
-    views: 28400, likes: 2340, isOfficial: true, isAI: false, trending: true,
-    note: "Zeppツアー「Kyururin Wonderland」初日公演のデモ表示です。",
-  },
-  {
-    id: 2, artistId: "kyurushite", focusMemberId: "uta", memberIds: ["uta"],
-    song: "きゅるりんしてみて", venue: "日比谷野外音楽堂", date: "2025-01-25", quality: "4K", source: "X",
-    sourceUrl: xUrl("島村嬉唄 推しカメラ"), tags: ["#うたちゃん", "#きゅるして", "#推しカメラ"],
-    views: 18200, likes: 1620, isOfficial: true, isAI: false, trending: true,
-    note: "島村嬉唄の推しカメラ動画のデモ表示です。",
-  },
-  {
-    id: 3, artistId: "kyurushite", focusMemberId: "yane", memberIds: ["yane"],
-    song: "きゅるりんしてみて", venue: "日比谷野外音楽堂", date: "2025-01-25", quality: "4K", source: "TikTok",
-    sourceUrl: tkUrl("環やね 推しカメラ"), tags: ["#環やね", "#やねっち", "#推しカメラ"],
-    views: 21500, likes: 1980, isOfficial: true, isAI: false, trending: false,
-    note: "環やねの推しカメラ動画のデモ表示です。",
-  },
-  {
-    id: 4, artistId: "kyurushite", focusMemberId: "yuna", memberIds: ["yuna"],
-    song: "♡♡♡わんだーらんど", venue: "Kanadevia Hall", date: "2025-06-06", quality: "1080p", source: "X",
-    sourceUrl: xUrl("チバゆな 推しカメラ"), tags: ["#チバゆな", "#推しカメラ"],
-    views: 15800, likes: 1420, isOfficial: true, isAI: false, trending: false,
-    note: "チバゆなの推しカメラ動画のデモ表示です。",
-  },
-  {
-    id: 5, artistId: "kyurushite", focusMemberId: "amu", memberIds: ["amu"],
-    song: "♡♡♡わんだーらんど", venue: "Kanadevia Hall", date: "2025-06-06", quality: "4K", source: "TikTok",
-    sourceUrl: tkUrl("逃げ水あむ 推しカメラ"), tags: ["#逃げ水あむ", "#あむあむ", "#推しカメラ"],
-    views: 33400, likes: 3120, isOfficial: true, isAI: false, trending: true,
-    note: "逃げ水あむの推しカメラ動画のデモ表示です。",
-  },
-  {
-    id: 6, artistId: "kyurushite", focusMemberId: "uta", memberIds: ["uta", "yane"],
-    song: "Special♡Spell", venue: "Zepp Shinjuku", date: "2025-04-06", quality: "4K", source: "TikTok",
-    sourceUrl: tkUrl("島村嬉唄 ファンカム"), tags: ["#うたちゃん", "#ファンカム"],
-    views: 19200, likes: 1750, isOfficial: true, isAI: false, trending: false,
-    note: "ファンカム動画のデモ表示です。",
-  },
-];
-
-export const QUALITIES = ["すべて", "4K", "1080p", "720p"];
-export const SOURCES = ["すべて", "X", "TikTok"];
 
 export const MEMBERS_FILTER = [
   { id: 'all', label: '全員', emoji: '💛💜🩷❤️' },
