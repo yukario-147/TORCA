@@ -1,51 +1,53 @@
 // src/theme.js
-// テーマカラー・ブレークポイント等の UI 共通定義
+// 推しカラーのテーマ切替・ブレークポイント・表示用フォーマッタ
+// 色トークン自体は src/index.css の :root に定義（白ベース）
 
 import { useState, useEffect } from "react";
 
-export const DEFAULT_ACCENT = "#FF69B4";
-export const DEFAULT_ACCENT_RGB = "255,105,180";
-
-export const ACCENT_RGB_MAP = {
-  "#FFD700": "255,215,0",
-  "#9B59B6": "155,89,182",
-  "#FF69B4": "255,105,180",
-  "#E74C3C": "231,76,60",
+// 推しカラーのパレット（白背景で読める濃色・淡色・ボタン用グラデをセットで持つ）
+// key はメンバー ID（data.js）。推し未設定は "all"（きゅるしてピンク）
+export const ACCENTS = {
+  all:  { accent: "#ff69b4", rgb: "255,105,180", deep: "#d63c8c", soft: "#ffe7f2", grad: "linear-gradient(135deg,#ff85c2 0%,#b57edc 100%)", on: "#ffffff" },
+  uta:  { accent: "#ffcc1f", rgb: "245,190,20",  deep: "#9a6f00", soft: "#fff6cf", grad: "linear-gradient(135deg,#ffe066 0%,#ffbb1f 100%)", on: "#4a3500" },
+  yane: { accent: "#a96bd1", rgb: "155,89,182",  deep: "#7d3fa5", soft: "#f3e8fb", grad: "linear-gradient(135deg,#c08ae6 0%,#8e4fb5 100%)", on: "#ffffff" },
+  yuna: { accent: "#ff69b4", rgb: "255,105,180", deep: "#d63c8c", soft: "#ffe7f2", grad: "linear-gradient(135deg,#ff8fc8 0%,#f0509e 100%)", on: "#ffffff" },
+  amu:  { accent: "#f0524a", rgb: "231,76,60",   deep: "#c9352a", soft: "#ffe9e6", grad: "linear-gradient(135deg,#ff7a72 0%,#e03b3b 100%)", on: "#ffffff" },
 };
 
-export function applyAccent(color) {
-  const el = document.documentElement;
-  el.style.setProperty("--accent", color);
-  el.style.setProperty("--accent-rgb", ACCENT_RGB_MAP[color] || DEFAULT_ACCENT_RGB);
+export function applyAccent(memberId) {
+  const p = ACCENTS[memberId] || ACCENTS.all;
+  const s = document.documentElement.style;
+  s.setProperty("--accent", p.accent);
+  s.setProperty("--accent-rgb", p.rgb);
+  s.setProperty("--accent-deep", p.deep);
+  s.setProperty("--accent-soft", p.soft);
+  s.setProperty("--accent-grad", p.grad);
+  s.setProperty("--on-accent", p.on);
 }
 
+// メンバーカラーのチップ用 CSS 変数（index.css の .chip.is-active が参照する）
+export const chipVars = (memberId) => {
+  const p = ACCENTS[memberId];
+  return p ? { "--chip": p.accent, "--chip-soft": p.soft, "--chip-deep": p.deep } : undefined;
+};
+
+const widthToBp = (w) => (w >= 1024 ? "desktop" : w >= 640 ? "tablet" : "mobile");
+
 export function useBreakpoint() {
-  const [bp, setBp] = useState("mobile");
+  // 初回から実際の幅で判定する（PC で一瞬モバイルレイアウトが出るのを防ぐ）
+  const [bp, setBp] = useState(() => widthToBp(window.innerWidth));
   useEffect(() => {
-    const update = () => {
-      const w = window.innerWidth;
-      if (w >= 1024) setBp("desktop");
-      else if (w >= 640) setBp("tablet");
-      else setBp("mobile");
-    };
-    update();
+    const update = () => setBp(widthToBp(window.innerWidth));
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
   return bp;
 }
 
-export const D = {
-  bg: "#0c0c12", surface: "#13131e", surfaceHover: "#1c1c2a",
-  border: "rgba(255,255,255,0.07)", borderHover: "rgba(255,255,255,0.14)",
-  text: "#f0eeff", textSub: "#8a82b0", textMuted: "#4a4570",
-  accent: DEFAULT_ACCENT, accentLight: "#ff8ec7", accentBg: "rgba(255,105,180,0.12)",
-  pink: "#e84393", gold: "#f59e0b", green: "#10b981", red: "#ef4444",
-};
-
-export const fmt = (n) => n >= 10000 ? (n / 10000).toFixed(1) + "万" : n.toLocaleString();
+export const fmt = (n) => (n >= 10000 ? (n / 10000).toFixed(1) + "万" : n.toLocaleString());
 
 export const formatDate = (iso) => {
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
   return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
 };

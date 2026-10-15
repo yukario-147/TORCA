@@ -2,88 +2,93 @@
 // みんなの撮可：ブックマーク + 手動/AIアーカイブの一覧と、共有コードによるファン間共有
 
 import { useState, useEffect } from 'react';
-import { MEMBERS_FILTER, PLATFORM_CONFIG } from './data.js';
-import { loadJSON, saveJSON, KEYS, buildShareCode, parseShareCode, mergeShareData } from './storage.js';
+import { MEMBERS_FILTER, PLATFORM_CONFIG, detectMemberName } from './data.js';
+import { chipVars } from './theme.js';
+import {
+  KEYS, useBookmarks, useArchive, getList, updateList,
+  buildShareCode, parseShareCode, mergeShareData,
+} from './storage.js';
 import { usePlayer } from './playerContext.js';
-import { PlayAllButton } from './components.jsx';
+import { PlayAllButton, PageHead, EmptyState, PlatformTag, Notice } from './components.jsx';
+import { Icon } from './icons.jsx';
+import { useFlash } from './useFlash.js';
 import EmbedModal from './EmbedModal.jsx';
 
-export default function ArchiveTab() {
+const EMBED_PLATFORMS = ['x', 'tiktok', 'instagram'];
+
+export default function ArchiveTab({ onGoSearch }) {
   const [memberFilter, setMemberFilter] = useState('all');
   const [platformFilter, setPlatformFilter] = useState('all');
-  const [refreshKey, setRefreshKey] = useState(0);
   const [sharePanel, setSharePanel] = useState(null); // null | 'export' | 'import'
   const [embedItem, setEmbedItem] = useState(null);
+  const [shareCode, setShareCode] = useState('');
+  const [importCode, setImportCode] = useState('');
+  const [shareMsg, flashShare] = useFlash();
+  const [undo, setUndo] = useState(null); // 直前に削除したアイテム（元に戻す用）
 
-  // タイトル未取得の既存エントリを oEmbed で遡って補完する
-  // （X のタイトル抽出・TikTok 短縮 URL 解決に対応する前に保存されたデータの修復）
+  const { bookmarks, remove: removeBookmark } = useBookmarks();
+  const { archive, remove: removeArchive } = useArchive();
+  const player = usePlayer();
+
+  // タイトル未取得の既存エントリを oEmbed で遡って補完する（1回の表示で最大5件）
+  // 補完結果は ID 指定でストアに反映するため、取得中の追加・削除を上書きしない
   useEffect(() => {
-    const arc = loadJSON(KEYS.archive, []);
-    const targets = arc
+    const targets = getList(KEYS.archive)
       .filter(a => (a.platform === 'x' || a.platform === 'tiktok') && !a.title && !a.enrichTried)
       .slice(0, 5);
     if (targets.length === 0) return;
-    let alive = true;
-    (async () => {
-      const updated = [...arc];
-      for (const t of targets) {
-        const i = updated.findIndex(a => a.id === t.id);
-        if (i < 0) continue;
-        updated[i] = { ...updated[i], enrichTried: true };
-        try {
-          const r = await fetch(`/api/oembed?url=${encodeURIComponent(t.url)}&platform=${t.platform}`);
-          const oe = r.ok ? await r.json() : null;
-          if (oe) {
-            updated[i] = {
-              ...updated[i],
-              title: oe.title || updated[i].title,
-              authorName: oe.authorName || updated[i].authorName,
-              thumbnailUrl: updated[i].thumbnailUrl || oe.thumbnailUrl || null,
-              ...(t.platform === 'tiktok' && oe.videoId ? { tiktokVideoId: oe.videoId } : {}),
-              ...(oe.resolvedUrl ? { url: oe.resolvedUrl } : {}),
-            };
-          }
-        } catch { /* 補完失敗は無視（enrichTried で再試行を防ぐ） */ }
-      }
-      if (!alive) return;
-      saveJSON(KEYS.archive, updated);
-      setRefreshKey(k => k + 1);
-    })();
-    return () => { alive = false; };
-  }, []);
-  const [shareCode, setShareCode] = useState('');
-  const [importCode, setImportCode] = useState('');
-  const [shareMsg, setShareMsg] = useState('');
+    const ids = new Set(targets.map(t => t.id));
+    updateList(KEYS.archive, prev => prev.map(a => (ids.has(a.id) ? { ...a, enrichTried: true } : a)));
 
-  const rawBookmarks = loadJSON(KEYS.bookmarks, []);
-  const bookmarks = rawBookmarks.map(b => ({
+    targets.forEach(async (t) => {
+      try {
+        const r = await fetch(`/api/oembed?url=${encodeURIComponent(t.url)}&platform=${t.platform}`);
+        const oe = r.ok ? await r.json() : null;
+        if (!oe) return;
+        updateList(KEYS.archive, prev => {
+          const urlTaken = oe.resolvedUrl && prev.some(a => a.url === oe.resolvedUrl);
+          return prev.map(a => (a.id !== t.id ? a : {
+            ...a,
+            title: oe.title || a.title,
+            authorName: oe.authorName || a.authorName,
+            thumbnailUrl: a.thumbnailUrl || oe.thumbnailUrl || null,
+            ...(t.platform === 'tiktok' && oe.videoId ? { tiktokVideoId: oe.videoId } : {}),
+            ...(oe.resolvedUrl && !urlTaken ? { url: oe.resolvedUrl } : {}),
+          }));
+        });
+      } catch { /* 補完失敗は無視（enrichTried で再試行を防ぐ） */ }
+    });
+  }, []);
+
+  // URL アーカイブ済みの YouTube 動画はブックマーク側を重複表示しない
+  const archivedVideoIds = new Set(archive.map(a => a.videoId).filter(Boolean));
+  const bookmarkItems = bookmarks.filter(b => !archivedVideoIds.has(b.videoId)).map(b => ({
     id: 'yt_' + b.videoId,
+    source: 'bookmark',
     platform: 'youtube',
     url: `https://www.youtube.com/watch?v=${b.videoId}`,
     title: b.title,
     authorName: b.channelTitle,
-    thumbnailUrl: b.thumbnailUrl || b.thumbnail,
-    member: null,
+    thumbnailUrl: b.thumbnailUrl || b.thumbnail || null,
+    member: detectMemberName(b.title),
     note: null,
-    savedAt: b.savedAt || new Date().toISOString(),
+    savedAt: b.savedAt || '',
     videoId: b.videoId,
     shared: !!b.shared,
   }));
+  const archiveItems = archive.map(a => ({
+    ...a,
+    source: 'archive',
+    member: a.member || detectMemberName(`${a.title || ''} ${a.note || ''}`),
+  }));
 
-  const archive = loadJSON(KEYS.archive, []);
-
-  const allItems = [...bookmarks, ...archive].sort((a, b) =>
-    new Date(b.savedAt) - new Date(a.savedAt)
+  const allItems = [...bookmarkItems, ...archiveItems].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0));
+  const filtered = allItems.filter(item =>
+    (memberFilter === 'all' || item.member === memberFilter) &&
+    (platformFilter === 'all' || item.platform === platformFilter)
   );
 
-  const filtered = allItems.filter(item => {
-    if (memberFilter !== 'all' && item.member !== memberFilter) return false;
-    if (platformFilter !== 'all' && item.platform !== platformFilter) return false;
-    return true;
-  });
-
-  // YouTube ブックマークをアプリ内プレイヤーのプレイリストに変換
-  const player = usePlayer();
+  // YouTube のアイテムをアプリ内プレイヤーのプレイリストに変換
   const playQueue = filtered
     .filter(item => item.videoId)
     .map(item => ({
@@ -94,7 +99,7 @@ export default function ArchiveTab() {
       publishedAt: '',
     }));
 
-  // タップ時の挙動：YouTube → 撮可シアター / X・TikTok → アプリ内埋め込み / それ以外 → 外部リンク
+  // タップ時の挙動：YouTube → 撮可シアター / X・TikTok・Instagram → アプリ内埋め込み
   const openItem = (item, e) => {
     if (item.videoId && player) {
       e.preventDefault();
@@ -102,52 +107,45 @@ export default function ArchiveTab() {
       player.openPlayer(playQueue, Math.max(0, idx));
       return;
     }
-    if (item.platform === 'x' || item.platform === 'tiktok' || item.platform === 'instagram') {
+    if (EMBED_PLATFORMS.includes(item.platform)) {
       e.preventDefault();
       setEmbedItem(item);
     }
   };
 
   const removeItem = (item) => {
-    if (item.platform === 'youtube') {
-      const bms = loadJSON(KEYS.bookmarks, []);
-      saveJSON(KEYS.bookmarks, bms.filter(b => b.videoId !== item.videoId));
+    if (item.source === 'bookmark') {
+      const original = bookmarks.find(b => b.videoId === item.videoId);
+      removeBookmark(item.videoId);
+      setUndo({ title: item.title, restore: () => updateList(KEYS.bookmarks, prev => (prev.some(b => b.videoId === original.videoId) ? prev : [...prev, original])) });
     } else {
-      const arc = loadJSON(KEYS.archive, []);
-      saveJSON(KEYS.archive, arc.filter(a => a.id !== item.id));
+      const original = archive.find(a => a.id === item.id);
+      removeArchive(item.id);
+      setUndo({ title: item.note || item.title, restore: () => updateList(KEYS.archive, prev => (prev.some(a => a.url === original.url) ? prev : [original, ...prev])) });
     }
-    setRefreshKey(k => k + 1);
-  };
-
-  const memberLabel = (memberId) => {
-    if (!memberId) return null;
-    return MEMBERS_FILTER.find(m => m.id === memberId);
   };
 
   const openExport = () => {
+    if (sharePanel === 'export') { setSharePanel(null); return; }
     if (allItems.length === 0) {
-      setShareMsg('共有できるアーカイブがまだありません');
-      setTimeout(() => setShareMsg(''), 3000);
+      flashShare('共有できるアーカイブがまだありません', 'warn', 3000);
       return;
     }
-    const code = buildShareCode({ bookmarks: rawBookmarks, archive });
-    setShareCode(code);
-    setSharePanel(sharePanel === 'export' ? null : 'export');
-    setShareMsg('');
+    setShareCode(buildShareCode({ bookmarks, archive }));
+    setSharePanel('export');
+    flashShare(null);
   };
 
   const copyShareCode = async () => {
     try {
       await navigator.clipboard.writeText(shareCode);
-      setShareMsg('共有コードをコピーしました！Xやディスコでファン仲間に送ろう 💗');
+      flashShare('共有コードをコピーしました！Xやディスコでファン仲間に送ろう 💗', 'ok');
     } catch {
-      setShareMsg('コピーできませんでした。コードを選択して手動でコピーしてください');
+      flashShare('コピーできませんでした。コードを選択して手動でコピーしてください', 'warn');
     }
-    setTimeout(() => setShareMsg(''), 4000);
   };
 
   const shareViaOS = async () => {
-    if (!navigator.share) return copyShareCode();
     try {
       await navigator.share({
         title: 'TORCA 撮可アーカイブ',
@@ -158,250 +156,138 @@ export default function ArchiveTab() {
 
   const doImport = () => {
     try {
-      const parsed = parseShareCode(importCode);
-      const added = mergeShareData(parsed);
+      const added = mergeShareData(parseShareCode(importCode));
       setImportCode('');
-      setShareMsg(added > 0 ? `🎉 ${added}件のクリップを取り込みました！` : 'すべて登録済みでした（新しいクリップはありません）');
-      setRefreshKey(k => k + 1);
+      flashShare(added > 0 ? `🎉 ${added}件のクリップを取り込みました！` : 'すべて登録済みでした（新しいクリップはありません）', added > 0 ? 'ok' : 'info', 5000);
     } catch (err) {
-      setShareMsg(err.message);
+      flashShare(err.message, 'err', 5000);
     }
-    setTimeout(() => setShareMsg(''), 5000);
   };
 
-  const shareBtnStyle = (active) => ({
-    flex: 1, padding: '8px 10px', borderRadius: 10, fontSize: 12, fontWeight: 700,
-    border: active ? '1.5px solid var(--accent)' : '1.5px solid var(--border-subtle)',
-    background: active ? 'rgba(224,64,160,0.15)' : 'var(--bg-card)',
-    color: active ? 'var(--accent-light)' : 'var(--text-secondary)',
-    cursor: 'pointer', transition: 'all 0.2s',
-  });
+  const canNativeShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   return (
-    <div key={refreshKey} style={{ padding: '0 0 80px 0' }}>
+    <div>
       {embedItem && <EmbedModal item={embedItem} onClose={() => setEmbedItem(null)} />}
-      <div style={{ padding: '16px 16px 0' }}>
-        <h2 style={{
-          fontSize: 20, fontWeight: 800, margin: '0 0 4px',
-          background: 'linear-gradient(120deg, var(--accent-light), var(--accent2))',
-          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-        }}>みんなの撮可</h2>
-        <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '0 0 12px', lineHeight: 1.5 }}>
-          共有コードでファン同士のアーカイブを交換できます。データは端末内にのみ保存されます。
-        </p>
 
-        {/* 共有コード */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          <button onClick={openExport} style={shareBtnStyle(sharePanel === 'export')}>
-            📤 共有コードを作成
+      <PageHead title="みんなの撮可" desc="保存したクリップの一覧です。共有コードでファン同士のアーカイブを交換できます（データは端末内にのみ保存）。" />
+
+      {/* 共有コード */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <button onClick={openExport} className={`btn btn-sm ${sharePanel === 'export' ? 'btn-soft' : 'btn-ghost'}`} style={{ flex: 1, padding: '10px 8px' }}>
+          <Icon name="share" size={15} />共有コードを作成
+        </button>
+        <button onClick={() => { setSharePanel(sharePanel === 'import' ? null : 'import'); flashShare(null); }}
+          className={`btn btn-sm ${sharePanel === 'import' ? 'btn-soft' : 'btn-ghost'}`} style={{ flex: 1, padding: '10px 8px' }}>
+          <Icon name="download" size={15} />コードを取り込む
+        </button>
+      </div>
+
+      {sharePanel === 'export' && (
+        <div className="card card-pad" style={{ marginBottom: 10, animation: 'pageIn 0.2s var(--ease)' }}>
+          <div style={{ fontSize: 11.5, color: 'var(--text-sub)', marginBottom: 8, lineHeight: 1.6 }}>
+            このコードをファン仲間に送ると、あなたのアーカイブ（最新100件まで）を相手のTORCAに取り込めます。
+          </div>
+          <textarea readOnly value={shareCode} onFocus={e => e.target.select()} rows={3} className="textarea" style={{ color: 'var(--text-sub)' }} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button onClick={copyShareCode} className="btn btn-primary btn-sm" style={{ flex: 1, padding: 10 }}>コピー</button>
+            {canNativeShare && (
+              <button onClick={shareViaOS} className="btn btn-ghost btn-sm" style={{ flex: 1, padding: 10 }}>他のアプリで共有</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {sharePanel === 'import' && (
+        <div className="card card-pad" style={{ marginBottom: 10, animation: 'pageIn 0.2s var(--ease)' }}>
+          <div style={{ fontSize: 11.5, color: 'var(--text-sub)', marginBottom: 8, lineHeight: 1.6 }}>
+            ファン仲間からもらった共有コード（TORCA1. で始まる文字列）を貼り付けてください。
+          </div>
+          <textarea value={importCode} onChange={e => setImportCode(e.target.value)} placeholder="TORCA1.xxxxxxxx..." rows={3} className="textarea" />
+          <button onClick={doImport} disabled={!importCode.trim()} className="btn btn-primary btn-sm btn-block" style={{ marginTop: 10, padding: 10 }}>
+            取り込む
           </button>
-          <button
-            onClick={() => { setSharePanel(sharePanel === 'import' ? null : 'import'); setShareMsg(''); }}
-            style={shareBtnStyle(sharePanel === 'import')}
-          >
-            📥 コードを取り込む
+        </div>
+      )}
+
+      <Notice msg={shareMsg} style={{ marginBottom: 10 }} />
+
+      {/* フィルター */}
+      <div className="chip-scroll" style={{ marginBottom: 8 }}>
+        {[{ id: 'all', label: 'すべて' }, ...Object.entries(PLATFORM_CONFIG).map(([id, c]) => ({ id, label: c.label, cfg: c }))].map(p => (
+          <button key={p.id} onClick={() => setPlatformFilter(p.id)}
+            className={`chip chip-sm${platformFilter === p.id ? ' is-active' : ''}`}
+            style={p.cfg ? { '--chip': p.cfg.color, '--chip-soft': p.cfg.soft, '--chip-deep': p.cfg.color } : undefined}>
+            {p.cfg && <span>{p.cfg.icon}</span>}{p.label}
           </button>
+        ))}
+      </div>
+      <div className="chip-scroll" style={{ marginBottom: 14 }}>
+        {MEMBERS_FILTER.map(m => (
+          <button key={m.id} onClick={() => setMemberFilter(m.id)}
+            className={`chip chip-sm${memberFilter === m.id ? ' is-active' : ''}`} style={chipVars(m.memberId)}>
+            <span>{m.emoji}</span>{m.label}
+          </button>
+        ))}
+      </div>
+
+      {undo && (
+        <div className="notice notice-info" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            「{undo.title || 'クリップ'}」を削除しました
+          </span>
+          <button className="btn btn-ghost btn-sm" onClick={() => { undo.restore(); setUndo(null); }}>元に戻す</button>
+          <button onClick={() => setUndo(null)} aria-label="閉じる" style={{ display: 'flex', color: 'var(--brand)' }}><Icon name="close" size={15} /></button>
         </div>
+      )}
 
-        {sharePanel === 'export' && (
-          <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.6 }}>
-              このコードをファン仲間に送ると、あなたのアーカイブ（最新100件まで）を相手のTORCAに取り込めます。
-            </div>
-            <textarea
-              readOnly
-              value={shareCode}
-              onFocus={e => e.target.select()}
-              rows={3}
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8,
-                border: '1.5px solid var(--border-subtle)', background: '#0c0c12',
-                color: 'var(--text-secondary)', fontSize: 10, outline: 'none', resize: 'vertical',
-                fontFamily: 'monospace', wordBreak: 'break-all',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button onClick={copyShareCode} style={{
-                flex: 1, padding: '8px', borderRadius: 8, border: 'none',
-                background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
-                color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-              }}>コピー</button>
-              {typeof navigator !== 'undefined' && !!navigator.share && (
-                <button onClick={shareViaOS} style={{
-                  flex: 1, padding: '8px', borderRadius: 8,
-                  border: '1.5px solid var(--border-subtle)', background: 'transparent',
-                  color: 'var(--text-secondary)', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-                }}>他のアプリで共有</button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {sharePanel === 'import' && (
-          <div style={{ padding: '12px 14px', borderRadius: 10, background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', marginBottom: 10 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, lineHeight: 1.6 }}>
-              ファン仲間からもらった共有コード（TORCA1. で始まる文字列）を貼り付けてください。
-            </div>
-            <textarea
-              value={importCode}
-              onChange={e => setImportCode(e.target.value)}
-              placeholder="TORCA1.xxxxxxxx..."
-              rows={3}
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 8,
-                border: '1.5px solid var(--border-subtle)', background: '#0c0c12',
-                color: 'var(--text-primary)', fontSize: 10, outline: 'none', resize: 'vertical',
-                fontFamily: 'monospace', wordBreak: 'break-all',
-              }}
-            />
-            <button
-              onClick={doImport}
-              disabled={!importCode.trim()}
-              style={{
-                width: '100%', marginTop: 8, padding: '8px', borderRadius: 8, border: 'none',
-                background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
-                color: '#fff', fontWeight: 700, fontSize: 12,
-                cursor: importCode.trim() ? 'pointer' : 'not-allowed',
-                opacity: importCode.trim() ? 1 : 0.5,
-              }}
-            >取り込む</button>
-          </div>
-        )}
-
-        {shareMsg && (
-          <div style={{
-            fontSize: 12, padding: '8px 12px', borderRadius: 8, marginBottom: 10, lineHeight: 1.5,
-            background: shareMsg.includes('ません') && !shareMsg.includes('新しいクリップ')
-              ? 'rgba(231,76,60,0.15)' : 'rgba(16,185,129,0.15)',
-            color: shareMsg.includes('ません') && !shareMsg.includes('新しいクリップ')
-              ? '#e74c3c' : '#34d399',
-          }}>
-            {shareMsg}
-          </div>
-        )}
-
-        {/* プラットフォームフィルター */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-          {[{ id: 'all', label: 'すべて' }, ...Object.entries(PLATFORM_CONFIG).map(([id, c]) => ({ id, label: c.label }))].map(p => {
-            const cfg = PLATFORM_CONFIG[p.id];
-            return (
-              <button key={p.id} onClick={() => setPlatformFilter(p.id)} style={{
-                padding: '4px 12px', borderRadius: 20, fontSize: 11,
-                border: platformFilter === p.id ? `1.5px solid ${cfg?.color || 'var(--accent)'}` : '1.5px solid var(--border-subtle)',
-                background: platformFilter === p.id ? `${cfg?.color || 'var(--accent)'}22` : 'var(--bg-card)',
-                color: platformFilter === p.id ? (cfg?.color || 'var(--accent)') : 'var(--text-secondary)',
-                fontWeight: platformFilter === p.id ? 700 : 400, cursor: 'pointer', transition: 'all 0.2s',
-              }}>
-                {cfg ? `${cfg.icon} ` : ''}{p.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* メンバーフィルター */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-          {MEMBERS_FILTER.map(m => (
-            <button key={m.id} onClick={() => setMemberFilter(m.id)} style={{
-              padding: '4px 12px', borderRadius: 20, fontSize: 11,
-              border: memberFilter === m.id ? `1.5px solid ${m.color || 'var(--accent)'}` : '1.5px solid var(--border-subtle)',
-              background: memberFilter === m.id ? `${m.color || 'var(--accent)'}22` : 'var(--bg-card)',
-              color: memberFilter === m.id ? (m.color || 'var(--accent)') : 'var(--text-secondary)',
-              fontWeight: memberFilter === m.id ? 700 : 400, cursor: 'pointer', transition: 'all 0.2s',
-            }}>
-              {m.emoji} {m.label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{filtered.length}件</span>
-          <PlayAllButton queue={playQueue} label="▶ プレイリスト再生" />
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 12, color: 'var(--text-sub)', fontWeight: 700 }}>{filtered.length}件</span>
+        <PlayAllButton queue={playQueue} label="プレイリスト再生" />
       </div>
 
       {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📼</div>
-          <p style={{ fontSize: 14, margin: 0 }}>まだアーカイブがありません</p>
-          <p style={{ fontSize: 12, marginTop: 6 }}>検索タブでお気に入りを ♡ してみよう</p>
-        </div>
+        <EmptyState icon="📼" title={allItems.length === 0 ? 'まだアーカイブがありません' : '条件に合うクリップがありません'}
+          actions={allItems.length === 0 && <button className="btn btn-primary" onClick={onGoSearch}><Icon name="search" size={15} />撮可をさがす</button>}>
+          {allItems.length === 0 ? <>さがすタブでお気に入りを ♡ してみよう</> : <>フィルターを変えてみてください</>}
+        </EmptyState>
       ) : (
-        <div style={{ padding: '0 16px' }}>
-          {filtered.map(item => {
-            const cfg = PLATFORM_CONFIG[item.platform] || PLATFORM_CONFIG.youtube;
-            const ml = memberLabel(item.member);
-            return (
-              <div key={item.id} style={{
-                display: 'flex', alignItems: 'stretch', position: 'relative',
-                background: 'var(--bg-card)', borderRadius: 10,
-                border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
-              }}>
-                <a href={item.url} target="_blank" rel="noopener noreferrer"
-                  onClick={(e) => openItem(item, e)}
-                  style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}>
-                  {item.thumbnailUrl ? (
-                    <img src={item.thumbnailUrl} alt={item.title || item.note || ''} style={{ width: 120, height: 68, objectFit: 'cover', flexShrink: 0 }} />
-                  ) : (
-                    <div style={{
-                      width: 120, height: 68, flexShrink: 0, background: `${cfg.color}18`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 24, color: cfg.color,
-                    }}>{cfg.icon}</div>
-                  )}
-                  <div style={{ flex: 1, minWidth: 0, padding: '8px 36px 8px 10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3, flexWrap: 'wrap' }}>
-                      <span style={{
-                        fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                        background: `${cfg.color}22`, color: cfg.color,
-                      }}>{cfg.icon} {cfg.label}</span>
-                      {ml && (
-                        <span style={{ fontSize: 9, color: ml.color, fontWeight: 700 }}>
-                          {ml.emoji} {ml.label}
-                        </span>
-                      )}
-                      {item.aiDetected && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                          background: 'rgba(255,105,180,0.15)', color: '#ff8ec7',
-                        }}>🤖 AI</span>
-                      )}
-                      {item.shared && (
-                        <span style={{
-                          fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                          background: 'rgba(16,185,129,0.15)', color: '#34d399',
-                        }}>📥 共有</span>
-                      )}
-                    </div>
-                    <p style={{
-                      fontSize: 12, fontWeight: 600, margin: '0 0 3px', lineHeight: 1.4,
-                      color: 'var(--text-primary)',
-                      display: '-webkit-box', WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical', overflow: 'hidden',
-                      wordBreak: 'break-word',
-                    }}>
-                      {item.note || item.title || (item.authorName ? `${item.authorName} のポスト` : item.url)}
-                    </p>
-                    <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                      {[item.song && `🎵 ${item.song}`, item.venue && `📍 ${item.venue}`, item.authorName]
-                        .filter(Boolean).join(' · ')}
-                    </div>
+        filtered.map(item => {
+          const cfg = PLATFORM_CONFIG[item.platform] || PLATFORM_CONFIG.youtube;
+          const ml = item.member ? MEMBERS_FILTER.find(m => m.id === item.member) : null;
+          const meta = [item.song && `🎵 ${item.song}`, item.venue && `📍 ${item.venue}`, item.authorName].filter(Boolean).join(' · ');
+          return (
+            <div key={item.id} className="row-card">
+              <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={(e) => openItem(item, e)} className="row-link">
+                <div className="row-thumb" style={item.thumbnailUrl ? undefined : { background: cfg.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, color: cfg.color }}>
+                  {item.thumbnailUrl ? <img src={item.thumbnailUrl} alt="" loading="lazy" referrerPolicy="no-referrer" /> : cfg.icon}
+                  {item.videoId && player && <span className="play-dot"><Icon name="play" size={13} /></span>}
+                </div>
+                <div className="row-body">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 5, flexWrap: 'wrap' }}>
+                    <PlatformTag cfg={cfg} />
+                    {ml && <span className="tag" style={{ ...tagFor(ml.memberId) }}>{ml.emoji} {ml.label}</span>}
+                    {item.aiDetected && <span className="tag" style={{ background: 'var(--brand-soft)', color: 'var(--brand)' }}>🤖 AI</span>}
+                    {item.shared && <span className="tag" style={{ background: 'var(--ok-soft)', color: 'var(--ok)' }}>共有</span>}
                   </div>
-                </a>
-                <button
-                  onClick={() => removeItem(item)}
-                  style={{
-                    position: 'absolute', top: 6, right: 6,
-                    background: 'transparent', border: 'none', cursor: 'pointer',
-                    fontSize: 14, padding: '2px 4px', color: 'var(--text-secondary)',
-                    transition: 'color 0.2s',
-                  }}
-                  title="削除"
-                >✕</button>
-              </div>
-            );
-          })}
-        </div>
+                  <p className="row-title">
+                    {item.note || item.title || (item.authorName ? `${item.authorName} のポスト` : item.url)}
+                  </p>
+                  {meta && <div className="row-meta" style={{ marginTop: 3 }}>{meta}</div>}
+                </div>
+              </a>
+              <button onClick={() => removeItem(item)} className="row-action" title="削除" aria-label="削除">
+                <Icon name="trash" size={17} />
+              </button>
+            </div>
+          );
+        })
       )}
     </div>
   );
+}
+
+function tagFor(memberId) {
+  const v = chipVars(memberId);
+  return v ? { background: v['--chip-soft'], color: v['--chip-deep'] } : {};
 }

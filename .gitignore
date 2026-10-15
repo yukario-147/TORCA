@@ -32,3 +32,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code（ローカル開発用の設定）
+.claude/launch.json

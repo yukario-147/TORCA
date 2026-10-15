@@ -4,14 +4,40 @@
 // ・X は oEmbed が title を返さないため、埋め込み HTML からポスト本文を抽出してタイトルにする
 // ・TikTok は短縮 URL（vt.tiktok.com / tiktok.com/t/）をリダイレクト解決し、動画 ID も返す
 
-const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; TORCA/2.2)' };
+const UA = { 'User-Agent': 'Mozilla/5.0 (compatible; TORCA/3.0)' };
+
+const PLATFORM_HOSTS = {
+  x: ['x.com', 'twitter.com'],
+  twitter: ['x.com', 'twitter.com'],
+  tiktok: ['tiktok.com'],
+  youtube: ['youtube.com', 'youtu.be'],
+  instagram: ['instagram.com'],
+};
+
+// URL のホストがプラットフォームのドメインか検証（任意 URL へのサーバー側リクエストを防ぐ）
+function isPlatformUrl(platform, url) {
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    const host = u.hostname.toLowerCase();
+    return (PLATFORM_HOSTS[platform] || []).some(d => host === d || host.endsWith('.' + d));
+  } catch {
+    return false;
+  }
+}
 
 // HTML エンティティの最低限のデコード
 function decodeEntities(s) {
   return s
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(n))
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
     .replace(/&mdash;/g, '—').replace(/&hellip;/g, '…').replace(/&nbsp;/g, ' ');
+}
+
+// 絵文字（サロゲートペア）を途中で切らずに文字数で切り詰める
+export function clip(s, max) {
+  const chars = Array.from(s || '');
+  return chars.length > max ? chars.slice(0, max).join('') + '…' : chars.join('');
 }
 
 // X の埋め込み blockquote からポスト本文を抽出
@@ -22,15 +48,20 @@ function tweetTextFromHtml(html) {
     m[1].replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '')
   ).replace(/\s+/g, ' ').trim();
   if (!text) return null;
-  return text.length > 100 ? text.slice(0, 100) + '…' : text;
+  return clip(text, 100);
 }
 
-// TikTok の短縮 URL を実 URL に解決
-async function resolveTikTokUrl(url) {
-  if (!/vt\.tiktok\.com|tiktok\.com\/t\//.test(url)) return url;
+// TikTok の短縮 URL を実 URL に解決（解決先も TikTok のドメインの場合のみ採用）
+async function resolveTikTokUrl(url, signal) {
+  let u;
+  try { u = new URL(url); } catch { return url; }
+  const host = u.hostname;
+  const isShort = host === 'vt.tiktok.com' || host === 'vm.tiktok.com'
+    || (/^(www\.)?tiktok\.com$/.test(host) && u.pathname.startsWith('/t/'));
+  if (!isShort) return url;
   try {
-    const r = await fetch(url, { redirect: 'follow', headers: UA });
-    return r.url || url;
+    const r = await fetch(url, { redirect: 'follow', headers: UA, signal });
+    return r.url && isPlatformUrl('tiktok', r.url) ? r.url : url;
   } catch {
     return url;
   }
@@ -44,7 +75,9 @@ function tiktokIdFromUrl(url) {
 const EMPTY = { title: null, authorName: null, thumbnailUrl: null, html: null, videoId: null, resolvedUrl: null };
 
 // oEmbed 情報の取得コア。api/sns-search.js の検索結果補強からも共用する
+// 未対応プラットフォーム・不正 URL は null
 export async function fetchOembed(platform, url, { timeoutMs = 8000 } = {}) {
+  if (!PLATFORM_HOSTS[platform] || !isPlatformUrl(platform, url)) return null;
   // Instagram は oEmbed に認証が必要なためスキップ
   if (platform === 'instagram') return { ...EMPTY };
 
@@ -55,15 +88,12 @@ export async function fetchOembed(platform, url, { timeoutMs = 8000 } = {}) {
     let resolvedUrl = url;
 
     if (platform === 'x' || platform === 'twitter') {
-      // omit_script=true: blockquote のみ受け取り、widgets.js はフロントで読み込む
-      oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true&theme=dark&lang=ja`;
+      oembedUrl = `https://publish.twitter.com/oembed?url=${encodeURIComponent(url)}&omit_script=true&lang=ja`;
     } else if (platform === 'tiktok') {
-      resolvedUrl = await resolveTikTokUrl(url);
+      resolvedUrl = await resolveTikTokUrl(url, controller.signal);
       oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(resolvedUrl)}`;
-    } else if (platform === 'youtube') {
-      oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
     } else {
-      return null;
+      oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
     }
 
     const response = await fetch(oembedUrl, { headers: UA, signal: controller.signal });
@@ -72,7 +102,7 @@ export async function fetchOembed(platform, url, { timeoutMs = 8000 } = {}) {
     }
 
     const data = await response.json();
-    // script タグは返さない（フロントで公式スクリプトを別途読み込む）
+    // script タグは返さない
     const html = typeof data.html === 'string'
       ? data.html.replace(/<script[\s\S]*?<\/script>/gi, '')
       : null;
@@ -94,13 +124,13 @@ export async function fetchOembed(platform, url, { timeoutMs = 8000 } = {}) {
     return {
       title,
       authorName: data.author_name || null,
-      thumbnailUrl: data.thumbnail_url || null,
+      thumbnailUrl: typeof data.thumbnail_url === 'string' && data.thumbnail_url.startsWith('https://') ? data.thumbnail_url : null,
       html,
       videoId,
       resolvedUrl: resolvedUrl !== url ? resolvedUrl : null,
     };
   } catch (err) {
-    if (err?.name !== 'AbortError') console.error('oembed fetch error:', err);
+    if (err?.name !== 'AbortError') console.error('oembed fetch error:', err?.message || err);
     return { ...EMPTY };
   } finally {
     clearTimeout(timeoutId);
@@ -108,17 +138,17 @@ export async function fetchOembed(platform, url, { timeoutMs = 8000 } = {}) {
 }
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { url, platform } = req.query;
-  if (!url) return res.status(400).json({ error: 'url is required' });
+  const { url, platform } = req.query || {};
+  if (!url || typeof url !== 'string') return res.status(400).json({ error: 'url is required' });
 
   const result = await fetchOembed(platform, url);
-  if (result === null) return res.status(400).json({ error: 'Unsupported platform' });
-  return res.status(200).json(result);
+  if (result === null) return res.status(400).json({ error: 'Unsupported platform or url' });
+
+  // フロントでは埋め込み HTML を使わないので返さない
+  const rest = { ...result };
+  delete rest.html;
+  res.setHeader('Cache-Control', rest.title || rest.videoId ? 'public, s-maxage=86400, stale-while-revalidate=604800' : 'no-store');
+  return res.status(200).json(rest);
 }
