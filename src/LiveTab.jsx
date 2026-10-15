@@ -1,148 +1,109 @@
 // src/LiveTab.jsx
 // ライブ：イベントスケジュール + 次のライブへのカウントダウン + 撮可ルールの心得
 
-import { D } from './theme.js';
-import { upcomingEvents, pastEvents, nextEvent, daysUntil, formatEventDate } from './events.js';
+import { upcomingEvents, pastEvents, daysUntil, formatEventDate } from './events.js';
+import { OFFICIAL_SITE } from './data.js';
+import { PageHead, SectionHead, EmptyState } from './components.jsx';
+import { Icon } from './icons.jsx';
 
 const KIND_COLORS = {
-  'ワンマン':  { bg: 'rgba(232,64,160,0.18)', color: '#f472b6' },
-  '対バン':    { bg: 'rgba(59,130,246,0.15)', color: '#60a5fa' },
-  'リリイベ':  { bg: 'rgba(16,185,129,0.15)', color: '#34d399' },
-  'フェス':    { bg: 'rgba(245,158,11,0.15)', color: '#fbbf24' },
+  'ワンマン': { bg: 'var(--accent-soft)', color: 'var(--accent-deep)' },
+  '対バン':   { bg: '#e6f1ff', color: '#2f6fd0' },
+  'リリイベ': { bg: 'var(--ok-soft)', color: 'var(--ok)' },
+  'フェス':   { bg: 'var(--warn-soft)', color: 'var(--warn)' },
 };
-
-function KindBadge({ kind }) {
-  const c = KIND_COLORS[kind] || { bg: 'rgba(255,255,255,0.08)', color: D.textSub };
-  return (
-    <span style={{ fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 5, background: c.bg, color: c.color }}>
-      {kind}
-    </span>
-  );
-}
 
 function EventCard({ ev, highlight = false }) {
   const days = daysUntil(ev.date);
   const isPast = days < 0;
+  const kind = KIND_COLORS[ev.kind] || { bg: 'var(--surface-2)', color: 'var(--text-sub)' };
   return (
-    <a
-      href={ev.url}
-      target="_blank"
-      rel="noopener noreferrer"
+    <a href={ev.url || OFFICIAL_SITE} target="_blank" rel="noopener noreferrer" className="card"
       style={{
-        display: 'block', textDecoration: 'none', marginBottom: 8,
-        background: highlight
-          ? 'linear-gradient(135deg,rgba(var(--accent-rgb),0.14),rgba(var(--accent-rgb),0.03))'
-          : 'var(--bg-card)',
-        border: highlight ? '1px solid rgba(var(--accent-rgb),0.4)' : `1px solid ${D.border}`,
-        borderRadius: 14, padding: '13px 14px',
-        opacity: isPast ? 0.55 : 1,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5, flexWrap: 'wrap' }}>
-        <KindBadge kind={ev.kind} />
-        {ev.sample && (
-          <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 5, background: 'rgba(245,158,11,0.15)', color: '#fbbf24' }}>
-            未確認
-          </span>
-        )}
-        <span style={{ fontSize: 11, color: D.textSub, fontWeight: 700 }}>{formatEventDate(ev.date)}</span>
+        display: 'block', textDecoration: 'none', marginBottom: 10, padding: '14px 16px',
+        opacity: isPast ? 0.6 : 1,
+        ...(highlight ? { borderColor: 'rgba(var(--accent-rgb),0.5)', boxShadow: '0 6px 22px rgba(var(--accent-rgb),0.18)' } : {}),
+      }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+        {ev.kind && <span className="tag" style={{ background: kind.bg, color: kind.color }}>{ev.kind}</span>}
+        {ev.sample && <span className="tag" style={{ background: 'var(--warn-soft)', color: 'var(--warn)' }}>未確認</span>}
+        <span style={{ fontSize: 11.5, color: 'var(--text-sub)', fontWeight: 700 }}>{formatEventDate(ev.date)}</span>
         {!isPast && (
-          <span style={{ fontSize: 10, color: 'var(--accent-light)', fontWeight: 800, marginLeft: 'auto' }}>
-            {days === 0 ? '🎪 本日！' : `あと${days}日`}
+          <span style={{ fontSize: 11, color: 'var(--accent-deep)', fontWeight: 800, marginLeft: 'auto' }}>
+            {days === 0 ? '🎪 今日！' : `あと${days}日`}
           </span>
         )}
       </div>
-      <div style={{ fontSize: 14, fontWeight: 800, color: D.text, lineHeight: 1.4, marginBottom: 3 }}>{ev.title}</div>
-      <div style={{ fontSize: 11, color: D.textSub }}>📍 {ev.venue}</div>
-      <div style={{ fontSize: 10, color: D.textMuted, marginTop: 5 }}>
-        📸 撮可情報：{ev.takaInfo} <span style={{ marginLeft: 6 }}>詳細は公式サイトで確認 ↗</span>
+      <div style={{ fontSize: 14.5, fontWeight: 800, lineHeight: 1.4, marginBottom: 3 }}>{ev.title}</div>
+      <div style={{ fontSize: 11.5, color: 'var(--text-sub)' }}>📍 {ev.venue}</div>
+      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 6 }}>
+        📸 撮可情報：{ev.takaInfo || '未発表'} · 詳細は公式サイトで確認 ↗
       </div>
     </a>
   );
 }
 
 export default function LiveTab() {
-  const next = nextEvent();
   const upcoming = upcomingEvents();
   const past = pastEvents();
+  const next = upcoming[0] || null;
+  const nextDays = next ? daysUntil(next.date) : null;
 
   return (
-    <div style={{ paddingBottom: 40 }}>
-      <h2 style={{
-        fontSize: 20, fontWeight: 800, margin: '4px 0 4px',
-        background: 'linear-gradient(120deg, var(--accent-light), var(--accent2))',
-        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-      }}>ライブスケジュール</h2>
-      <p style={{ fontSize: 11, color: D.textSub, margin: '0 0 16px', lineHeight: 1.6 }}>
-        次の現場に向けて準備しよう。日程・撮可ルールは必ず
-        <a href="https://www.kyurushite.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-light)' }}> 公式サイト </a>
-        で最終確認を。
-      </p>
+    <div>
+      <PageHead title="ライブスケジュール">
+        <p className="page-desc">
+          次の現場に向けて準備しよう。日程・撮可ルールは必ず
+          <a href={OFFICIAL_SITE} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-deep)', fontWeight: 700 }}> 公式サイト </a>
+          で最終確認を。
+        </p>
+      </PageHead>
 
       {/* カウントダウンヒーロー */}
       {next ? (
-        <div style={{
-          background: 'linear-gradient(135deg,rgba(var(--accent-rgb),0.2),rgba(168,85,247,0.08))',
-          border: '1px solid rgba(var(--accent-rgb),0.35)',
-          borderRadius: 18, padding: '22px 18px', marginBottom: 18, textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 10, color: 'var(--accent-light)', fontWeight: 800, letterSpacing: '0.14em', marginBottom: 8 }}>
-            NEXT LIVE
-          </div>
-          <div style={{ fontSize: 44, fontWeight: 900, color: D.text, lineHeight: 1 }}>
-            {daysUntil(next.date) === 0 ? '本日' : (
-              <>あと<span style={{ fontSize: 64, margin: '0 6px', background: 'linear-gradient(120deg, var(--accent-light), var(--accent2))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{daysUntil(next.date)}</span>日</>
+        <section className="holo-card" style={{ textAlign: 'center', padding: '24px 18px', marginBottom: 18 }}>
+          <div className="eyebrow">NEXT LIVE</div>
+          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, margin: '6px 0 4px' }}>
+            {nextDays === 0 ? <span className="holo-text" style={{ fontSize: 48 }}>今日！</span> : (
+              <>あと<span className="holo-text" style={{ fontFamily: 'var(--font-logo)', fontSize: 64, margin: '0 6px' }}>{nextDays}</span>日</>
             )}
           </div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: D.text, marginTop: 10 }}>{next.title}</div>
-          <div style={{ fontSize: 11, color: D.textSub, marginTop: 3 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, marginTop: 8 }}>{next.title}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-sub)', marginTop: 3 }}>
             {formatEventDate(next.date)} · 📍 {next.venue}
           </div>
-        </div>
+        </section>
       ) : (
-        <div style={{ background: 'var(--bg-card)', border: `1px solid ${D.border}`, borderRadius: 14, padding: '22px 18px', textAlign: 'center', marginBottom: 18 }}>
-          <div style={{ fontSize: 30, marginBottom: 10 }}>🎪</div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: D.text, marginBottom: 6 }}>登録済みのイベント情報がありません</div>
-          <div style={{ fontSize: 11, color: D.textSub, lineHeight: 1.7, marginBottom: 14 }}>
+        <div className="card" style={{ marginBottom: 18 }}>
+          <EmptyState icon="🎪" title="登録済みのイベント情報がありません"
+            actions={<>
+              <a href={OFFICIAL_SITE} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">🌐 公式サイト <Icon name="external" size={13} /></a>
+              <a href="https://x.com/KYURUSHITE" target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">𝕏 公式アカウント <Icon name="external" size={13} /></a>
+              <a href={`https://x.com/search?q=${encodeURIComponent('from:KYURUSHITE (ライブ OR チケット OR 出演)')}&f=live`} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">📅 公式のライブ告知 <Icon name="external" size={13} /></a>
+            </>}>
             最新のスケジュール・チケット情報は公式の発信をチェック！
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <a href="https://www.kyurushite.com/" target="_blank" rel="noopener noreferrer"
-              style={{ background: 'linear-gradient(135deg, var(--accent), var(--accent2))', borderRadius: 10, padding: '9px 16px', color: '#fff', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-              🌐 公式サイト ↗
-            </a>
-            <a href="https://x.com/KYURUSHITE" target="_blank" rel="noopener noreferrer"
-              style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${D.border}`, borderRadius: 10, padding: '9px 16px', color: D.text, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-              𝕏 公式アカウント ↗
-            </a>
-            <a href="https://x.com/search?q=from%3AKYURUSHITE%20(%E3%83%A9%E3%82%A4%E3%83%96%20OR%20%E3%83%81%E3%82%B1%E3%83%83%E3%83%88%20OR%20%E5%87%BA%E6%BC%94)&f=live" target="_blank" rel="noopener noreferrer"
-              style={{ background: 'rgba(255,255,255,0.06)', border: `1px solid ${D.border}`, borderRadius: 10, padding: '9px 16px', color: D.text, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-              📅 公式のライブ告知を検索 ↗
-            </a>
-          </div>
+          </EmptyState>
         </div>
       )}
 
-      {/* 今後の予定 */}
       {upcoming.length > 0 && (
         <>
-          <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>📅 今後の予定</div>
+          <SectionHead eyebrow="UPCOMING" title="今後の予定" />
           {upcoming.map((ev, i) => <EventCard key={ev.id} ev={ev} highlight={i === 0} />)}
         </>
       )}
 
-      {/* 過去のイベント */}
       {past.length > 0 && (
         <>
-          <div style={{ fontSize: 13, fontWeight: 800, margin: '18px 0 10px' }}>🗓 終了したイベント</div>
+          <SectionHead eyebrow="ARCHIVE" title="終了したイベント" />
           {past.map(ev => <EventCard key={ev.id} ev={ev} />)}
         </>
       )}
 
       {/* 撮可の心得 */}
-      <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 14, padding: '14px 16px', marginTop: 18 }}>
-        <div style={{ fontSize: 12, color: '#fbbf24', fontWeight: 800, marginBottom: 6 }}>📸 撮可の心得</div>
-        <div style={{ fontSize: 11, color: '#d4a84b', lineHeight: 1.9 }}>
+      <div className="notice notice-warn" style={{ marginTop: 20, padding: '14px 16px' }}>
+        <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 13 }}>📸 撮可の心得</div>
+        <div style={{ fontSize: 11.5, lineHeight: 1.9, color: 'var(--text-sub)' }}>
           ・撮影可能区間（撮可）のルールは公演ごとに異なります。当日のアナウンスに必ず従いましょう<br />
           ・フラッシュ・自撮り棒・望遠レンズ等は禁止されている場合があります<br />
           ・周りのファンの視界を遮らないように。推しへの愛はマナーから 💗

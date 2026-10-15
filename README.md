@@ -1,16 +1,34 @@
-# React + Vite
+# TORCA
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+「きゅるりんってしてみて」の撮可（撮影可能区間）クリップを探す・観る・アーカイブする非公式ファンアプリ。
+React 19 + Vite のフロントエンドと、Vercel Functions（`api/`）で動きます。
 
-Currently, two official plugins are available:
+## 開発
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```bash
+npm install
+npm run dev      # http://localhost:5173 （/api も Vite の開発サーバー上で動く）
+npm run lint
+npm run build
+```
 
-## React Compiler
+API キーは `.env.local` に書きます（未設定の機能は「準備中」表示になります）。
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| 変数 | 用途 |
+| --- | --- |
+| `YOUTUBE_API_KEY` | YouTube 検索・ホーム／推しフィード |
+| `GEMINI_API_KEY` | 撮可スコアリング・URL アーカイブの AI 自動判定 |
+| `GEMINI_MODEL` | 任意。既定は `gemini-3.5-flash-lite` |
+| `TAVILY_API_KEY` | X / TikTok / Instagram の横断検索（`BRAVE_API_KEY` でも可） |
 
-## Expanding the ESLint configuration
+## 構成
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- `src/App.jsx` … アプリシェル（ナビ・推しカラー・オンボーディング）
+- `src/index.css` … デザインシステム（白ベース × ホログラムパステル。推しカラーは `--accent` 系変数）
+- `src/theme.js` … 推しカラーのパレット・ブレークポイント
+- `src/storage.js` … localStorage 永続化（ブックマーク・アーカイブは共有ストア）・共有コード・バックアップ
+- `src/*Tab.jsx` … 各画面、`src/player.jsx` / `src/EmbedModal.jsx` … アプリ内再生・埋め込み
+- `src/events.js` … ライブ予定（運営が手動で編集。未確認情報は載せない）
+- `api/youtube-search.js` … YouTube 検索（GET は Vercel CDN で30分キャッシュしてクォータを節約）
+- `api/sns-search.js` / `api/oembed.js` / `api/ai.js` … SNS 検索・oEmbed・AI 判定
+- `api/_gemini.js` … Gemini 共通ヘルパー（`_` 始まりなので公開ルートにはならない）

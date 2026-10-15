@@ -2,14 +2,14 @@
 // アプリシェル：ナビゲーション・レイアウト・オンボーディング・Web Share Target 受信
 // 各画面は src/HomeTab.jsx / MyTab.jsx / SearchTab.jsx / ArchiveTab.jsx / LiveTab.jsx 等に分割
 
-import { useState, useEffect } from "react";
+import { useState, useLayoutEffect, useRef } from "react";
 import Onboarding from './Onboarding.jsx';
 import Splash from './Splash.jsx';
-import { findMember } from './data.js';
-import { D, DEFAULT_ACCENT, DEFAULT_ACCENT_RGB, ACCENT_RGB_MAP, applyAccent, useBreakpoint } from './theme.js';
+import { findMember, shortNick } from './data.js';
+import { applyAccent, useBreakpoint } from './theme.js';
 import { Footer } from './components.jsx';
+import { Icon } from './icons.jsx';
 import { MemberPage } from './pages.jsx';
-import { KYURUSHITE, findArtist } from './data.js';
 import HomeTab from './HomeTab.jsx';
 import MyTab from './MyTab.jsx';
 import SearchTab from './SearchTab.jsx';
@@ -18,237 +18,206 @@ import LiveTab from './LiveTab.jsx';
 import SettingsTab from './SettingsTab.jsx';
 import { TermsTab, PrivacyTab, AboutTab, TakedownTab } from './LegalTabs.jsx';
 import { PlayerProvider } from './player.jsx';
-import { KEYS, recordOshiSince } from './storage.js';
+import { KEYS, getItem, setItem, recordOshiSince } from './storage.js';
+import { firstUrl, detectPlatform } from './urls.js';
 
-// Web Share Target（PWA）で渡されたパラメータから SNS の URL を取り出す
+// Web Share Target（PWA）で渡されたパラメータから SNS の URL を取り出す。
+// React の StrictMode 二重実行で消費済みにならないよう、モジュール読み込み時に1回だけ行う
 function consumeSharedUrl() {
   try {
     const params = new URLSearchParams(window.location.search);
     const candidates = [params.get('url'), params.get('text'), params.get('title')].filter(Boolean);
+    if (candidates.length === 0) return null;
+    // URL をクリーンにして再読み込み時の二重処理を防ぐ
+    window.history.replaceState({}, '', window.location.pathname);
     for (const c of candidates) {
-      const m = c.match(/https?:\/\/[^\s]+/);
-      if (m && /(x\.com|twitter\.com|tiktok\.com|instagram\.com|youtube\.com|youtu\.be)/.test(m[0])) {
-        // URL をクリーンにして再共有時の二重処理を防ぐ
-        window.history.replaceState({}, '', window.location.pathname);
-        return m[0];
-      }
+      const url = firstUrl(c);
+      if (url && detectPlatform(url)) return url;
     }
-    if (candidates.length > 0) window.history.replaceState({}, '', window.location.pathname);
   } catch { /* URL 解析失敗は無視 */ }
   return null;
 }
+const SHARED_URL = consumeSharedUrl();
+
+const MAIN_TABS = [
+  { key: "home",    icon: "home",   label: "ホーム" },
+  { key: "my",      icon: "heart",  label: "推し" },
+  { key: "search",  icon: "search", label: "さがす" },
+  { key: "archive", icon: "film",   label: "みんなの撮可" },
+  { key: "live",    icon: "ticket", label: "ライブ" },
+];
+
+const SUB_TITLES = {
+  settings: "設定",
+  terms: "利用規約",
+  privacy: "プライバシーポリシー",
+  about: "運営者情報",
+  takedown: "削除申請",
+};
 
 export default function App() {
   const bp = useBreakpoint();
   const isMobile = bp === "mobile";
 
-  // Web Share Target 経由で開かれた場合は検索タブ（アーカイブ欄）で起動
-  const [sharedUrl] = useState(() => consumeSharedUrl());
-  const [tab, setTab] = useState(() => (sharedUrl ? "search" : "home"));
-  const [viewArtist, setViewArtist] = useState(null);
+  const [tab, setTab] = useState(() => (SHARED_URL ? "search" : "home"));
+  const [lastMainTab, setLastMainTab] = useState("home");
   const [viewMember, setViewMember] = useState(null);
-  const [profile, setProfile] = useState(() => ({
-    artistId: "kyurushite",
-    memberId: localStorage.getItem(KEYS.member) || null,
-  }));
-  const [onboardingDone, setOnboardingDone] = useState(
-    () => !!localStorage.getItem(KEYS.onboarding)
-  );
-  const [accentColor, setAccentColor] = useState(
-    () => localStorage.getItem(KEYS.accent) || DEFAULT_ACCENT
-  );
+  const [memberId, setMemberId] = useState(() => getItem(KEYS.member) || null);
+  // null = 非表示 / "first" = 初回 / "change" = 推し変更（キャンセル可）
+  const [onboarding, setOnboarding] = useState(() => (getItem(KEYS.onboarding) ? null : "first"));
   const [splashDone, setSplashDone] = useState(false);
+  const scrollRef = useRef(null);
 
-  useEffect(() => {
-    const el = document.documentElement;
-    el.style.cssText = "height:100%;margin:0;padding:0;background:#0c0c12;";
-    el.style.setProperty("--bg-primary", "#0c0c12");
-    el.style.setProperty("--bg-card", "#13121f");
-    el.style.setProperty("--bg-card-hover", "#1a1828");
-    el.style.setProperty("--accent", accentColor);
-    el.style.setProperty("--accent-rgb", ACCENT_RGB_MAP[accentColor] || DEFAULT_ACCENT_RGB);
-    el.style.setProperty("--accent-light", "#f472b6");
-    el.style.setProperty("--accent2", "#a855f7");
-    el.style.setProperty("--text-primary", "#ffffff");
-    el.style.setProperty("--text-secondary", "rgba(255,255,255,0.55)");
-    el.style.setProperty("--text-muted", "rgba(255,255,255,0.35)");
-    el.style.setProperty("--border-subtle", "rgba(232,64,160,0.18)");
-    el.style.setProperty("--border-accent", "rgba(232,64,160,0.35)");
-    document.body.style.cssText = [
-      "height:100%;margin:0;padding:0;overflow:hidden;background:#0c0c12;",
-      "font-family:'DM Sans','Noto Sans JP',-apple-system,BlinkMacSystemFont,sans-serif;",
-      "-webkit-font-smoothing:antialiased;",
-      "background-image:radial-gradient(circle,rgba(255,255,255,0.03) 1px,transparent 1px);",
-      "background-size:32px 32px;",
-    ].join("");
-    const root = document.getElementById("root");
-    if (root) root.style.cssText = "width:100%;height:100%;margin:0;padding:0;";
-  }, []);
+  const myMember = memberId ? findMember(memberId) : null;
+  const isSubPage = tab in SUB_TITLES;
 
-  useEffect(() => {
-    const m = profile.memberId ? findMember("kyurushite", profile.memberId) : null;
-    applyAccent(m?.color || accentColor);
-  }, [profile.memberId]);
+  // 推しカラーを描画前に反映（黄色推しで一瞬ピンクが出るのを防ぐ）
+  useLayoutEffect(() => { applyAccent(memberId || "all"); }, [memberId]);
 
-  const setPushMember = (memberId) => {
-    if (memberId) {
-      localStorage.setItem(KEYS.member, memberId);
-      recordOshiSince(memberId);
-    } else {
-      localStorage.removeItem(KEYS.member);
-    }
-    setProfile(p => ({ ...p, memberId }));
+  // 画面切替時はスクロール位置を先頭に戻す
+  const contentKey = `${tab}-${viewMember || ''}`;
+  useLayoutEffect(() => { scrollRef.current?.scrollTo(0, 0); }, [contentKey]);
+
+  const setPushMember = (id) => {
+    setItem(KEYS.member, id || null);
+    if (id) recordOshiSince(id);
+    setMemberId(id || null);
   };
 
-  const handleOnboardingComplete = ({ memberId, memberColor }) => {
-    localStorage.setItem(KEYS.onboarding, '1');
-    localStorage.setItem(KEYS.accent, memberColor);
-    document.documentElement.style.setProperty('--accent', memberColor);
-    setAccentColor(memberColor);
-    setOnboardingDone(true);
-    setPushMember(memberId === 'all' ? null : memberId);
+  const handleOnboardingComplete = ({ memberId: id }) => {
+    setItem(KEYS.onboarding, '1');
+    setPushMember(id === 'all' ? null : id);
+    setOnboarding(null);
   };
 
-  const navigateTo = (t) => { setTab(t); setViewArtist(null); setViewMember(null); };
+  const handleOnboardingCancel = () => {
+    applyAccent(memberId || "all"); // プレビューで変えた色を戻す
+    setOnboarding(null);
+  };
 
-  const goToMember = (memberId) => {
-    setPushMember(memberId);
-    setTab("my");
-    setViewArtist(null);
+  const navigateTo = (t) => {
+    if (!(t in SUB_TITLES)) setLastMainTab(t);
+    else if (!isSubPage) setLastMainTab(tab);
+    setTab(t);
     setViewMember(null);
   };
 
-  const mainTabs = [
-    { key: "home",    icon: "🏠", label: "ホーム" },
-    { key: "my",      icon: "💖", label: "推し" },
-    { key: "search",  icon: "🔍", label: "検索" },
-    { key: "archive", icon: "📼", label: "みんなの撮可" },
-    { key: "live",    icon: "🎪", label: "ライブ" },
-  ];
-
-  const tabTitles = {
-    "search":  "🔍 撮可を探す",
-    "archive": "📼 みんなの撮可",
-    "live":    "🎪 ライブ",
-    "settings":"⚙ 設定",
-    "terms":   "利用規約",
-    "privacy": "プライバシーポリシー",
-    "about":   "運営者情報",
-    "takedown":"削除申請",
-  };
-
-  const isLegalTab = ["terms","privacy","about","takedown","settings"].includes(tab);
+  const openPushSettings = () => setOnboarding("change");
 
   const renderBody = () => {
-    if (viewMember && viewArtist) return (
-      <MemberPage artist={findArtist(viewArtist) || KYURUSHITE} member={findMember(viewArtist, viewMember)}
-        onBack={() => setViewMember(null)} />
-    );
+    if (viewMember) {
+      const m = findMember(viewMember);
+      if (m) return <MemberPage member={m} onBack={() => setViewMember(null)} />;
+    }
     switch (tab) {
-      case "home": return (
-        <HomeTab onGoToMember={goToMember} onGoLive={() => navigateTo("live")} onGoSearch={() => navigateTo("search")} />
-      );
-      case "my": return (
-        <MyTab profile={profile}
-          onSelectMember={(aId, mId) => { setViewArtist(aId); setViewMember(mId); }}
-          onChangePush={() => { localStorage.removeItem(KEYS.onboarding); setOnboardingDone(false); }} />
-      );
-      case "search":  return <SearchTab sharedUrl={sharedUrl} />;
-      case "archive": return <ArchiveTab />;
-      case "live":    return <LiveTab />;
-      case "settings": return <SettingsTab onChangePush={() => { localStorage.removeItem(KEYS.onboarding); setOnboardingDone(false); }} />;
+      case "home":     return <HomeTab onOpenMember={setViewMember} onGoLive={() => navigateTo("live")} onGoSearch={() => navigateTo("search")} />;
+      case "my":       return <MyTab member={myMember} onOpenMember={setViewMember} onChangePush={openPushSettings} />;
+      case "search":   return <SearchTab sharedUrl={SHARED_URL} />;
+      case "archive":  return <ArchiveTab onGoSearch={() => navigateTo("search")} />;
+      case "live":     return <LiveTab />;
+      case "settings": return <SettingsTab onChangePush={openPushSettings} />;
       case "terms":    return <TermsTab />;
       case "privacy":  return <PrivacyTab />;
       case "about":    return <AboutTab />;
       case "takedown": return <TakedownTab />;
-      default: return null;
+      default:         return null;
     }
   };
 
-  const contentKey = `${tab}-${viewArtist || ''}-${viewMember || ''}`;
+  const activeMain = isSubPage ? null : tab;
 
   return (
     <PlayerProvider>
       {!splashDone && <Splash onFinish={() => setSplashDone(true)} />}
-      {!onboardingDone && <Onboarding onComplete={handleOnboardingComplete} />}
-      <div style={{ fontFamily: "'DM Sans', 'Noto Sans JP', -apple-system, sans-serif", background: D.bg, width: "100vw", height: "100dvh", overflow: "hidden", color: D.text, display: "flex", flexDirection: "column" }}>
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+      {onboarding && (
+        <Onboarding
+          initialMemberId={onboarding === "change" ? (memberId || "all") : null}
+          onComplete={handleOnboardingComplete}
+          onCancel={onboarding === "change" ? handleOnboardingCancel : null}
+        />
+      )}
 
-        {/* PCサイドバー */}
+      <div className="app">
+        {/* PC / タブレット：サイドバー */}
         {!isMobile && (
-          <div style={{ width: 200, flexShrink: 0, background: D.surface, borderRight: `1px solid ${D.border}`, display: "flex", flexDirection: "column", padding: "20px 12px" }}>
-            <div style={{ marginBottom: 24, paddingLeft: 8 }}>
-              <div style={{ fontSize: 19, fontWeight: 900, letterSpacing: "0.1em", background: "linear-gradient(120deg, #f472b6 0%, #a855f7 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>TORCA</div>
-              <div style={{ fontSize: 9, color: D.textMuted, letterSpacing: "0.1em", marginTop: 1 }}>きゅるして撮可アーカイブ</div>
-              <div style={{ fontSize: 8, color: D.textMuted, marginTop: 4, lineHeight: 1.5 }}>💛💜🩷❤️<br />きゅるしてのための撮可アーカイブ</div>
+          <nav className="sidebar" aria-label="メインメニュー">
+            <div style={{ padding: "0 8px", marginBottom: 26 }}>
+              <div className="logo" style={{ fontSize: 30 }}>TORCA</div>
+              <div className="logo-sub">きゅるして撮可アーカイブ</div>
             </div>
-            {mainTabs.map(t => (
+            {MAIN_TABS.map(t => (
               <button key={t.key} onClick={() => navigateTo(t.key)}
-                style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 11px", borderRadius: 10, border: tab === t.key ? "1px solid rgba(232,64,160,0.28)" : "1px solid transparent", cursor: "pointer", background: tab === t.key ? "linear-gradient(120deg, rgba(232,64,160,0.18), rgba(168,85,247,0.18))" : "transparent", marginBottom: 2, width: "100%", textAlign: "left", transition: "all 0.22s cubic-bezier(0.4,0,0.2,1)" }}>
-                <span style={{ fontSize: tab === t.key ? 17 : 15, transition: "font-size 0.2s cubic-bezier(0.4,0,0.2,1)", display: "block" }}>{t.icon}</span>
-                <span style={{ fontSize: 13, fontWeight: tab === t.key ? 700 : 400, color: tab === t.key ? "#f472b6" : D.textSub, transition: "color 0.2s ease" }}>{t.label}</span>
+                className={`side-link${activeMain === t.key ? " is-active" : ""}`}
+                aria-current={activeMain === t.key ? "page" : undefined}>
+                <Icon name={t.icon} size={20} filled={t.icon === "heart" && activeMain === t.key} />
+                {t.label}
               </button>
             ))}
-            <div style={{ marginTop: "auto", fontSize: 9, color: D.textMuted, lineHeight: 1.6, paddingLeft: 8 }}>
-              著作権は各権利者に帰属します。
+            <div style={{ marginTop: "auto", padding: "0 8px" }}>
+              <div style={{ height: 3, borderRadius: 3, background: "var(--member-line)", marginBottom: 10, opacity: 0.8 }} />
+              <div style={{ fontSize: 10, color: "var(--text-muted)", lineHeight: 1.6 }}>
+                💛💜🩷❤️<br />きゅるしてのための撮可アーカイブ
+              </div>
             </div>
-          </div>
+          </nav>
         )}
 
-        {/* メインコラム */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+        <div className="app-main">
           {/* ヘッダー（PWA のステータスバー下に潜り込まないよう safe-area を確保） */}
-          <div style={{ background: "linear-gradient(135deg, #1a0a2e 0%, #130c20 50%, #0f0c1a 100%)", borderBottom: `1px solid ${D.border}`, padding: isMobile ? "calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px" : "12px 20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            {isMobile && (
-              <div style={{ flexShrink: 0 }}>
-                <div style={{ fontSize: 17, fontWeight: 900, letterSpacing: "0.1em", background: "linear-gradient(120deg, #f472b6 0%, #a855f7 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>TORCA</div>
-                <div style={{ fontSize: 8, color: D.textMuted, lineHeight: 1.4 }}>💛💜🩷❤️ きゅるしてのための撮可アーカイブ</div>
+          <header className="app-header">
+            {isSubPage ? (
+              <>
+                <button className="icon-btn" onClick={() => navigateTo(lastMainTab)} aria-label="戻る">
+                  <Icon name="back" size={18} />
+                </button>
+                <div className="app-header-title">{SUB_TITLES[tab]}</div>
+              </>
+            ) : isMobile ? (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="logo" style={{ fontSize: 24 }}>TORCA</div>
+                <div className="logo-sub" style={{ marginTop: 2 }}>きゅるしてのための撮可アーカイブ</div>
               </div>
+            ) : (
+              <div className="app-header-title">{MAIN_TABS.find(t => t.key === tab)?.label}</div>
             )}
-            {(tab !== "home" || viewMember) && (
-              <div style={{ fontSize: isMobile ? 12 : 14, fontWeight: 800, color: D.text, flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", textAlign: isMobile ? "center" : "left" }}>
-                {viewMember ? `📷 ${findMember(viewArtist, viewMember)?.name}` :
-                 tab === "my" ? "💖 推し" : tabTitles[tab]}
-              </div>
+
+            <button onClick={openPushSettings} className="chip chip-sm is-active" title="推しを変更"
+              style={{ flexShrink: 0, maxWidth: 140, overflow: "hidden" }}>
+              <span>{myMember ? myMember.emoji : "💗"}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{myMember ? shortNick(myMember) : "全員推し"}</span>
+            </button>
+            {tab !== "settings" && (
+              <button className="icon-btn" onClick={() => navigateTo("settings")} aria-label="設定" title="設定">
+                <Icon name="gear" size={18} />
+              </button>
             )}
-            <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-              {isLegalTab && (
-                <button onClick={() => navigateTo("home")}
-                  style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>← 戻る</button>
-              )}
-              <button onClick={() => { localStorage.removeItem(KEYS.onboarding); setOnboardingDone(false); }}
-                style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 10px", color: D.textSub, fontSize: 11, cursor: "pointer" }}>推し設定</button>
-              <button onClick={() => navigateTo("settings")} title="設定"
-                style={{ background: "rgba(255,255,255,0.05)", border: `1px solid ${D.border}`, borderRadius: 8, padding: "5px 9px", color: D.textSub, fontSize: 12, cursor: "pointer" }}>⚙</button>
-            </div>
-          </div>
+          </header>
 
           {/* ボディ */}
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-            <div key={contentKey} style={{ flex: "1 0 auto", padding: isMobile ? "14px 12px" : "18px 20px", animation: "pageIn 0.22s cubic-bezier(0.4,0,0.2,1)" }}>
+          <main className="app-scroll" ref={scrollRef}>
+            <div key={contentKey} className="app-content">
               {renderBody()}
             </div>
-            {isMobile && <Footer onNav={navigateTo} />}
-          </div>
-
-          {/* フッター（PC のみ常時表示） */}
-          {!isMobile && <Footer onNav={navigateTo} />}
+            <Footer onNav={navigateTo} />
+          </main>
 
           {/* モバイル下部ナビ */}
           {isMobile && (
-            <div style={{ background: D.surface, borderTop: `1px solid ${D.border}`, display: "flex", justifyContent: "space-around", padding: "8px 0 env(safe-area-inset-bottom, 12px)", flexShrink: 0 }}>
-              {mainTabs.map(t => (
-                <div key={t.key} onClick={() => navigateTo(t.key)}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, cursor: "pointer", opacity: tab === t.key ? 1 : 0.45, padding: "4px 6px", flex: 1, transition: "all 0.2s cubic-bezier(0.4,0,0.2,1)", transform: tab === t.key ? "translateY(-2px)" : "translateY(0)" }}>
-                  <span style={{ fontSize: tab === t.key ? 21 : 19, transition: "font-size 0.2s cubic-bezier(0.4,0,0.2,1)", display: "block" }}>{t.icon}</span>
-                  <span style={{ fontSize: 9, fontWeight: tab === t.key ? 800 : 400, color: tab === t.key ? D.accentLight : D.textMuted, transition: "color 0.2s ease" }}>{t.label}</span>
-                </div>
+            <nav className="tabbar" aria-label="メインメニュー">
+              {MAIN_TABS.map(t => (
+                <button key={t.key} onClick={() => navigateTo(t.key)}
+                  className={`tab${activeMain === t.key ? " is-active" : ""}`}
+                  aria-current={activeMain === t.key ? "page" : undefined}>
+                  <span className="tab-icon">
+                    <Icon name={t.icon} size={21} stroke={activeMain === t.key ? 2.3 : 2} filled={t.icon === "heart" && activeMain === t.key} />
+                  </span>
+                  {t.label}
+                </button>
               ))}
-            </div>
+            </nav>
           )}
         </div>
       </div>
-    </div>
     </PlayerProvider>
   );
 }

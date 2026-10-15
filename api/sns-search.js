@@ -11,7 +11,7 @@
 //                   （※新規プロジェクトへの提供終了。既存アクセス保有者のみ）
 
 import { MEMBER_ALIASES } from '../src/searchDict.js';
-import { fetchOembed } from './oembed.js';
+import { fetchOembed, clip } from './oembed.js';
 
 const PLATFORM_RULES = {
   x: {
@@ -73,7 +73,7 @@ function normalize(platform, rawItems) {
     .map(item => {
       const url = item.url.replace(/^http:/, 'https:').replace(/twitter\.com/, 'x.com');
       const title = cleanText((item.title || '').replace(/\s*[|｜-]\s*(X|TikTok|Instagram).*$/i, '')) || url;
-      let snippet = cleanText(item.snippet).slice(0, 160);
+      let snippet = clip(cleanText(item.snippet), 160);
       // タイトルと重複するスニペットは省く（読みやすさ優先）
       if (snippet && title.length > 12 && (snippet.startsWith(title.slice(0, 12)) || title.startsWith(snippet.slice(0, 12)))) {
         snippet = '';
@@ -144,9 +144,10 @@ async function searchTavily(platform, topic) {
       search_depth: 'basic',
     }),
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(`tavily:${res.status}:${(data?.detail?.error || data?.error || JSON.stringify(data)).slice ? (data?.detail?.error || data?.error || JSON.stringify(data)).slice(0, 120) : res.status}`);
+    const detail = data?.detail?.error || data?.error || '';
+    throw new Error(`tavily:${res.status}:${String(detail).slice(0, 120)}`);
   }
   return (data.results || []).map(r => ({
     url: r.url, title: r.title, snippet: r.content, thumbnailUrl: null,
@@ -164,7 +165,7 @@ async function searchBrave(platform, topic) {
   const res = await fetch(`https://api.search.brave.com/res/v1/web/search?${params}`, {
     headers: { Accept: 'application/json', 'X-Subscription-Token': process.env.BRAVE_API_KEY },
   });
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`brave:${res.status}`);
   return (data.web?.results || []).map(r => ({
     url: r.url, title: r.title, snippet: r.description,
@@ -182,7 +183,7 @@ async function searchGoogleCse(platform, topic) {
     siteSearch: rule.site, siteSearchFilter: 'i',
   });
   const res = await fetch(`https://www.googleapis.com/customsearch/v1?${params}`);
-  const data = await res.json();
+  const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`cse:${res.status}:${data?.error?.message?.slice(0, 100) || ''}`);
   return (data.items || []).map(item => ({
     url: item.link, title: item.title, snippet: item.snippet,
@@ -193,15 +194,13 @@ async function searchGoogleCse(platform, topic) {
 // ---------- ハンドラ ----------
 
 export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { platform, userInput = '', filters = {} } = req.body || {};
   if (!PLATFORM_RULES[platform]) return res.status(400).json({ error: 'unsupported platform' });
+  const input = typeof userInput === 'string' ? userInput.slice(0, 100) : '';
+  const safeFilters = filters && typeof filters === 'object' ? filters : {};
 
   const provider = process.env.TAVILY_API_KEY ? 'tavily'
     : process.env.BRAVE_API_KEY ? 'brave'
@@ -215,7 +214,7 @@ export default async function handler(req, res) {
     });
   }
 
-  const topic = buildTopic(userInput, filters);
+  const topic = buildTopic(input, safeFilters);
 
   try {
     const raw = provider === 'tavily' ? await searchTavily(platform, topic)

@@ -1,41 +1,44 @@
+// api/ai.js
+// Vercel Functions - URL アーカイブの AI 自動判定
+// SNS 投稿の URL・タイトル・投稿者から、メンバー・曲・会場・見出しを推定する。
+// プロンプトはサーバー側で固定（任意のプロンプトを中継する汎用プロキシにしない）。
+
+import { generateJson, geminiConfigured } from './_gemini.js';
+
+const MEMBERS = ['島村嬉唄', '環やね', 'チバゆな', '逃げ水あむ'];
+
+const SYSTEM = `あなたはアイドルグループ「きゅるりんってしてみて」のファン動画整理アシスタントです。
+メンバーは 島村嬉唄（うたちゃん）・環やね（やねちゃん/やねぴ）・チバゆな（ゆなちゃん）・逃げ水あむ（あむちゃん）の4人です。
+与えられた SNS 投稿の情報から、次の JSON のみを出力してください。説明文は一切不要です。
+{"member": "島村嬉唄" | "環やね" | "チバゆな" | "逃げ水あむ" | null, "song": 曲名 | null, "venue": 会場名 | null, "label": 20字以内の見出し}
+判断できない項目は null にしてください。推測で情報を作らないでください。`;
+
+const str = (v, max) => (typeof v === 'string' && v.trim() ? Array.from(v.trim()).slice(0, max).join('') : null);
+
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  res.setHeader('Cache-Control', 'no-store');
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!geminiConfigured()) return res.status(501).json({ error: 'GEMINI_API_KEY is not configured' });
+
+  const body = req.body || {};
+  const url = str(body.url, 500);
+  if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url is required' });
+  const title = str(body.title, 300);
+  const authorName = str(body.authorName, 100);
+
+  const out = await generateJson({
+    system: SYSTEM,
+    prompt: `URL: ${url}\nタイトル: ${title || '不明'}\n投稿者: ${authorName || '不明'}`,
+    timeoutMs: 9000,
+  });
+  if (!out || typeof out !== 'object' || Array.isArray(out)) {
+    return res.status(502).json({ error: 'AI analysis failed' });
   }
 
-  const { systemPrompt, userMessage } = req.body || {};
-
-  if (!systemPrompt || !userMessage) {
-    return res.status(400).json({ error: "systemPrompt and userMessage are required" });
-  }
-
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: "API key is not configured on server" });
-    }
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ parts: [{ text: userMessage }] }],
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (data.error) {
-      return res.status(500).json({ error: data.error.message });
-    }
-
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return res.status(200).json({ text });
-  } catch (e) {
-    return res.status(500).json({ error: e.message || "Internal server error" });
-  }
+  return res.status(200).json({
+    member: MEMBERS.includes(out.member) ? out.member : null,
+    song: str(out.song, 60),
+    venue: str(out.venue, 60),
+    label: str(out.label, 40),
+  });
 }

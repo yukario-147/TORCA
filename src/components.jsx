@@ -1,55 +1,89 @@
 // src/components.jsx
-// 共通 UI コンポーネント（Footer / ClipRow / PlayAllButton / Spinner）
+// 共通 UI コンポーネント
 
 import { useState } from "react";
-import { D, fmt, formatDate } from "./theme.js";
+import { fmt, formatDate } from "./theme.js";
 import { usePlayer } from "./playerContext.js";
 import { isNewSince } from "./storage.js";
+import { OFFICIAL_SITE } from "./data.js";
+import { Icon } from "./icons.jsx";
+
+export function Notice({ msg, style }) {
+  if (!msg) return null;
+  return <div className={`notice notice-${msg.kind}`} style={style}>{msg.text}</div>;
+}
+
+// =====================
+// 見出し
+// =====================
+export function PageHead({ title, desc, children }) {
+  return (
+    <div className="page-head">
+      <h1 className="page-title">{title}<span className="spark">✦</span></h1>
+      {desc && <p className="page-desc">{desc}</p>}
+      {children}
+    </div>
+  );
+}
+
+export function SectionHead({ eyebrow, title, action, style }) {
+  return (
+    <div className="sec-head" style={style}>
+      <div>
+        {eyebrow && <div className="eyebrow">{eyebrow}</div>}
+        <div className="sec-title">{title}</div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+export function EmptyState({ icon = "✦", title, children, actions }) {
+  return (
+    <div className="empty">
+      <div className="empty-icon">{icon}</div>
+      {title && <div className="empty-title">{title}</div>}
+      {children && <div className="empty-desc">{children}</div>}
+      {actions && <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginTop: 14 }}>{actions}</div>}
+    </div>
+  );
+}
+
+export function PlatformTag({ cfg }) {
+  return <span className="tag" style={{ background: cfg.soft, color: cfg.color }}>{cfg.tag || `${cfg.icon} ${cfg.label}`}</span>;
+}
 
 // =====================
 // フッター
 // =====================
 export function Footer({ onNav }) {
-  const [hovered, setHovered] = useState(null);
   return (
-    <div style={{ background: D.surface, flexShrink: 0 }}>
-      {/* グラデーションライン */}
-      <div style={{ height: 2, background: "linear-gradient(90deg,#FFD700,#9B59B6,#FF69B4,#E74C3C)", opacity: 0.6 }} />
-      <div style={{ padding: "12px 20px" }}>
-        <div style={{ display: "flex", justifyContent: "center", gap: 14, flexWrap: "wrap", marginBottom: 6 }}>
-          {[["利用規約","terms"],["プライバシーポリシー","privacy"],["運営者情報","about"],["削除申請","takedown"]].map(([label, t]) => (
-            <button key={t} onClick={() => onNav(t)}
-              onMouseEnter={() => setHovered(t)}
-              onMouseLeave={() => setHovered(null)}
-              style={{ background: "none", border: "none", color: hovered === t ? "#fff" : D.textSub, fontSize: 11, cursor: "pointer", textDecoration: "underline", padding: 0, transition: "color 0.2s ease" }}>
-              {label}
-            </button>
-          ))}
-        </div>
-        <div style={{ textAlign: "center", marginBottom: 4 }}>
-          <a href="https://www.kyurushite.com/" target="_blank" rel="noopener noreferrer"
-            style={{ fontSize: 10, color: D.accentLight, textDecoration: "none" }}>
-            きゅるりんってしてみて 公式サイト ↗
-          </a>
-        </div>
-        <div style={{ textAlign: "center", fontSize: 10, color: D.textMuted, lineHeight: 1.8 }}>
-          TORCAは非公式のファンサービスです。著作権はきゅるりんってしてみて・ディアステージに帰属します。<br />© 2025 TORCA
-        </div>
+    <footer className="footer">
+      <div className="footer-links">
+        {[["利用規約", "terms"], ["プライバシーポリシー", "privacy"], ["運営者情報", "about"], ["削除申請", "takedown"]].map(([label, t]) => (
+          <button key={t} onClick={() => onNav(t)}>{label}</button>
+        ))}
       </div>
-    </div>
+      <a href={OFFICIAL_SITE} target="_blank" rel="noopener noreferrer"
+        style={{ color: "var(--brand)", fontWeight: 700, textDecoration: "none", fontSize: 11 }}>
+        きゅるりんってしてみて 公式サイト ↗
+      </a>
+      <div style={{ marginTop: 4 }}>
+        TORCAは非公式のファンサービスです。著作権はきゅるりんってしてみて・ディアステージに帰属します。<br />
+        © {new Date().getFullYear()} TORCA
+      </div>
+    </footer>
   );
 }
 
-// YouTube 実データの撮可バッジ判定
+// YouTube 実データの撮可バッジ判定（低スコアに「公式」を付けない：公式判定はチャンネル ID のみ）
 function takaBadge(video) {
-  if (video.isOfficial) {
-    return { text: '🏷 公式', bg: 'rgba(168,85,247,0.18)', color: '#a855f7' };
-  }
+  if (video.isOfficial) return { text: "公式", bg: "var(--brand-soft)", color: "var(--brand)" };
   const score = video.takaScore;
-  if (score === null || score === undefined) return null;
-  if (score >= 80) return { text: '📸 撮可', bg: 'rgba(16,185,129,0.18)', color: '#10b981' };
-  if (score >= 50) return { text: '🎬 関連', bg: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' };
-  return { text: '🏷 公式', bg: 'rgba(168,85,247,0.15)', color: '#a855f7' };
+  if (typeof score !== "number") return null;
+  if (score >= 80) return { text: "📸 撮可", bg: "var(--ok-soft)", color: "var(--ok)" };
+  if (score >= 50) return { text: "関連", bg: "var(--surface-2)", color: "var(--text-sub)" };
+  return null;
 }
 
 // =====================
@@ -67,100 +101,44 @@ export function ClipRow({ video, bookmarked, onToggleBookmark, rank, queue, queu
     if (!canPlay) return; // プレイヤー外では通常の外部リンク遷移
     e.preventDefault();
     const q = queue && queue.length > 0 ? queue : [video];
-    player.openPlayer(q, queueIndex ?? q.indexOf(video));
+    const idx = queueIndex ?? q.findIndex(v => v.videoId === video.videoId);
+    player.openPlayer(q, Math.max(0, idx));
   };
 
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'stretch', position: 'relative',
-        background: 'var(--bg-card)', borderRadius: 10,
-        border: '1px solid var(--border-subtle)', marginBottom: 8, overflow: 'hidden',
-      }}
-    >
+    <div className="row-card">
       {rank != null && (
         <div style={{
-          width: 26, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 15, fontWeight: 900, color: rank <= 3 ? D.gold : D.textMuted,
+          width: 28, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "flex-end",
+          fontFamily: "var(--font-logo)", fontSize: 17, fontWeight: 700,
+          color: rank <= 3 ? "var(--gold)" : "var(--text-muted)",
         }}>{rank}</div>
       )}
-      <a
-        href={`https://www.youtube.com/watch?v=${video.videoId}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={handleOpen}
-        style={{ display: 'flex', textDecoration: 'none', color: 'inherit', flex: 1, minWidth: 0 }}
-      >
-        <div style={{ position: 'relative', width: 120, height: 68, flexShrink: 0 }}>
-          {video.thumbnailUrl ? (
-            <img
-              src={video.thumbnailUrl}
-              alt={video.title}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-            />
-          ) : (
-            <div style={{
-              width: '100%', height: '100%', background: '#1a1828',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'var(--text-secondary)', fontSize: 20,
-            }}>▶</div>
-          )}
-          {canPlay && (
-            <div style={{
-              position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <span style={{
-                width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.55)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, color: '#fff', paddingLeft: 2,
-              }}>▶</span>
-            </div>
-          )}
+      <a href={`https://www.youtube.com/watch?v=${video.videoId}`} target="_blank" rel="noopener noreferrer"
+        onClick={handleOpen} className="row-link">
+        <div className="row-thumb">
+          {video.thumbnailUrl
+            ? <img src={video.thumbnailUrl} alt="" loading="lazy" />
+            : <div style={{ width: "100%", height: "100%" }} />}
+          {canPlay && <span className="play-dot"><Icon name="play" size={13} /></span>}
           {isNew && (
-            <span style={{
-              position: 'absolute', top: 4, left: 4, fontSize: 8, fontWeight: 900,
-              padding: '1px 5px', borderRadius: 4, letterSpacing: '0.06em',
-              background: 'var(--accent)', color: '#fff',
-            }}>NEW</span>
+            <span className="tag" style={{ position: "absolute", top: 5, left: 5, background: "var(--accent-grad)", color: "var(--on-accent)", fontSize: 8.5, padding: "1px 6px" }}>NEW</span>
           )}
         </div>
-        <div style={{ flex: 1, minWidth: 0, padding: '8px 36px 8px 10px' }}>
-          <p style={{
-            fontSize: 12, fontWeight: 600, margin: '0 0 4px', lineHeight: 1.4,
-            color: 'var(--text-primary)',
-            display: '-webkit-box', WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          }}>
-            {video.title}
-          </p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap', fontSize: 10, color: 'var(--text-secondary)' }}>
-            <span>
-              {video.channelTitle}
-              {video.publishedAt ? ` · ${formatDate(video.publishedAt)}` : ''}
-              {video.viewCount > 0 ? ` · ▶ ${fmt(video.viewCount)}` : ''}
+        <div className="row-body">
+          <p className="row-title">{video.title}</p>
+          <div className="row-meta">
+            {badge && <span className="tag" style={{ background: badge.bg, color: badge.color }}>{badge.text}</span>}
+            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {[video.channelTitle, video.publishedAt && formatDate(video.publishedAt), video.viewCount > 0 && `▶ ${fmt(video.viewCount)}`].filter(Boolean).join(" · ")}
             </span>
-            {badge && (
-              <span style={{
-                fontSize: 9, padding: '1px 5px', borderRadius: 4,
-                background: badge.bg, color: badge.color, fontWeight: 700,
-              }}>{badge.text}</span>
-            )}
           </div>
         </div>
       </a>
       {onToggleBookmark && (
-        <button
-          onClick={() => onToggleBookmark(video)}
-          style={{
-            position: 'absolute', top: 6, right: 6,
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            fontSize: 16, padding: '2px 4px',
-            color: bookmarked ? 'var(--accent)' : 'var(--text-secondary)',
-            transition: 'color 0.2s',
-          }}
-          title={bookmarked ? 'ブックマーク解除' : 'ブックマーク'}
-        >
-          {bookmarked ? '♥' : '♡'}
+        <button onClick={() => onToggleBookmark(video)} className={`row-action${bookmarked ? " is-on" : ""}`}
+          title={bookmarked ? "ブックマーク解除" : "ブックマーク"} aria-label={bookmarked ? "ブックマーク解除" : "ブックマーク"} aria-pressed={!!bookmarked}>
+          <Icon name="heart" size={19} filled={bookmarked} />
         </button>
       )}
     </div>
@@ -173,131 +151,46 @@ export function ClipRow({ video, bookmarked, onToggleBookmark, rank, queue, queu
 // ・サムネイルあり（TikTok等）→ メディアカード
 // ・サムネイルなし（X等）    → ポストカード（本文を主役にした引用風レイアウト）
 // =====================
-export function SnsRow({ item, saved, onToggleSave, onOpen, platformConfig }) {
-  const cfg = platformConfig;
+export function SnsRow({ item, saved, onToggleSave, onOpen, platformConfig: cfg }) {
   const [thumbBroken, setThumbBroken] = useState(false);
   const hasThumb = !!item.thumbnailUrl && !thumbBroken;
 
-  const saveBtn = (
-    <button
-      onClick={() => onToggleSave(item)}
-      style={{
-        position: 'absolute', top: 8, right: 8,
-        background: 'rgba(12,12,18,0.5)', border: 'none', cursor: 'pointer',
-        fontSize: 15, width: 30, height: 30, borderRadius: '50%',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: saved ? 'var(--accent)' : 'rgba(255,255,255,0.75)',
-        transition: 'color 0.2s',
-      }}
-      title={saved ? 'アーカイブから削除' : 'アーカイブに保存'}
-    >
-      {saved ? '♥' : '♡'}
-    </button>
-  );
-
-  const badge = (
-    <span style={{
-      fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 5,
-      background: `${cfg.color}22`, color: cfg.color, letterSpacing: '0.02em',
-    }}>{cfg.icon} {cfg.label}</span>
-  );
-
-  // ---------- ポストカード（サムネイルなし・X 向け） ----------
-  if (!hasThumb) {
-    return (
-      <div style={{
-        position: 'relative', marginBottom: 10,
-        background: 'var(--bg-card)', borderRadius: 14,
-        border: '1px solid var(--border-subtle)',
-        borderLeft: `3px solid ${cfg.color}`,
-        overflow: 'hidden',
-      }}>
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => { e.preventDefault(); onOpen(item); }}
-          style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '12px 42px 11px 14px' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
-            {badge}
+  return (
+    <div className="row-card" style={hasThumb ? undefined : { borderLeft: `3px solid ${cfg.color}` }}>
+      <a href={item.url} target="_blank" rel="noopener noreferrer"
+        onClick={(e) => { e.preventDefault(); onOpen(item); }} className="row-link">
+        {hasThumb && (
+          <div className="row-thumb" style={{ width: 92, aspectRatio: "3 / 4" }}>
+            <img src={item.thumbnailUrl} alt="" referrerPolicy="no-referrer" loading="lazy" onError={() => setThumbBroken(true)} />
+            <span className="play-dot"><Icon name="play" size={13} /></span>
+          </div>
+        )}
+        <div className="row-body" style={{ padding: "12px 42px 12px 13px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6, minWidth: 0 }}>
+            <PlatformTag cfg={cfg} />
             {item.authorName && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-sub)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {item.authorName}
               </span>
             )}
           </div>
-          <p style={{
-            fontSize: 13, fontWeight: 500, margin: 0, lineHeight: 1.65,
-            color: 'var(--text-primary)', wordBreak: 'break-word',
-            display: '-webkit-box', WebkitLineClamp: 4,
-            WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          }}>
+          <p className="row-title" style={{ WebkitLineClamp: hasThumb ? 3 : 4, fontWeight: hasThumb ? 700 : 500, fontSize: 13, lineHeight: 1.6 }}>
             {item.title}
           </p>
           {item.snippet && (
-            <p style={{
-              fontSize: 11, color: 'var(--text-secondary)', margin: '6px 0 0', lineHeight: 1.5,
-              display: '-webkit-box', WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word',
-            }}>
+            <p style={{ fontSize: 11, color: "var(--text-sub)", marginTop: 5, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", wordBreak: "break-word" }}>
               {item.snippet}
             </p>
           )}
-          <div style={{ fontSize: 10, color: cfg.color, fontWeight: 700, marginTop: 8 }}>
-            ▶ タップして表示
-          </div>
-        </a>
-        {saveBtn}
-      </div>
-    );
-  }
-
-  // ---------- メディアカード（サムネイルあり・TikTok / Instagram 向け） ----------
-  return (
-    <div style={{
-      position: 'relative', marginBottom: 10,
-      background: 'var(--bg-card)', borderRadius: 14,
-      border: '1px solid var(--border-subtle)', overflow: 'hidden',
-    }}>
-      <a
-        href={item.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => { e.preventDefault(); onOpen(item); }}
-        style={{ display: 'flex', textDecoration: 'none', color: 'inherit', minWidth: 0 }}
-      >
-        <div style={{ position: 'relative', width: 110, alignSelf: 'stretch', minHeight: 96, flexShrink: 0, background: '#0a0a10' }}>
-          <img src={item.thumbnailUrl} alt="" referrerPolicy="no-referrer"
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-            onError={() => setThumbBroken(true)} />
-          <span style={{
-            position: 'absolute', bottom: 6, left: 6,
-            width: 24, height: 24, borderRadius: '50%', background: 'rgba(0,0,0,0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, color: '#fff', paddingLeft: 1,
-          }}>▶</span>
-        </div>
-        <div style={{ flex: 1, minWidth: 0, padding: '11px 42px 10px 12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-            {badge}
-            {item.authorName && (
-              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {item.authorName}
-              </span>
-            )}
-          </div>
-          <p style={{
-            fontSize: 12, fontWeight: 600, margin: 0, lineHeight: 1.55,
-            color: 'var(--text-primary)', wordBreak: 'break-word',
-            display: '-webkit-box', WebkitLineClamp: 3,
-            WebkitBoxOrient: 'vertical', overflow: 'hidden',
-          }}>
-            {item.title}
-          </p>
+          {!hasThumb && (
+            <div style={{ fontSize: 10.5, color: "var(--accent-deep)", fontWeight: 800, marginTop: 8 }}>タップして表示 ›</div>
+          )}
         </div>
       </a>
-      {saveBtn}
+      <button onClick={() => onToggleSave(item)} className={`row-action${saved ? " is-on" : ""}`}
+        title={saved ? "アーカイブから削除" : "アーカイブに保存"} aria-label={saved ? "アーカイブから削除" : "アーカイブに保存"} aria-pressed={!!saved}>
+        <Icon name="heart" size={19} filled={saved} />
+      </button>
     </div>
   );
 }
@@ -305,37 +198,34 @@ export function SnsRow({ item, saved, onToggleSave, onOpen, platformConfig }) {
 // =====================
 // 連続再生ボタン（セクション見出し横に置く小型ボタン）
 // =====================
-export function PlayAllButton({ queue, label = '▶ 連続再生' }) {
+export function PlayAllButton({ queue, label = "連続再生" }) {
   const player = usePlayer();
-  if (!player || !queue || queue.filter(v => v.videoId).length === 0) return null;
+  if (!player || !queue || !queue.some(v => v.videoId)) return null;
   return (
-    <button
-      onClick={() => player.openPlayer(queue, 0)}
-      style={{
-        background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
-        border: 'none', borderRadius: 20, padding: '4px 13px',
-        color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer',
-        boxShadow: '0 2px 12px rgba(232,64,160,0.35)',
-      }}
-    >
-      {label}
+    <button onClick={() => player.openPlayer(queue, 0)} className="btn btn-primary btn-sm">
+      <Icon name="play" size={12} />{label}
     </button>
   );
 }
 
 // =====================
-// ローディングスピナー
+// ローディング
 // =====================
 export function Spinner({ label }) {
   return (
-    <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-secondary)' }}>
-      <div style={{
-        width: 32, height: 32,
-        border: '3px solid var(--border-subtle)', borderTop: '3px solid var(--accent)',
-        borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px',
-      }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      {label && <p style={{ fontSize: 13, margin: 0 }}>{label}</p>}
+    <div style={{ textAlign: "center", padding: "30px 0", color: "var(--text-sub)" }} role="status">
+      <div className="spinner" />
+      {label && <p style={{ fontSize: 12, fontWeight: 500 }}>{label}</p>}
+    </div>
+  );
+}
+
+export function SkeletonRows({ count = 3 }) {
+  return (
+    <div aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="skeleton" style={{ height: 88, marginBottom: 10 }} />
+      ))}
     </div>
   );
 }

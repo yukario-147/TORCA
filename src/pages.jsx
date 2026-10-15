@@ -1,9 +1,10 @@
 // src/pages.jsx
 // メンバーページ / メンバー最新クリップフィード
 
-import { D } from "./theme.js";
-import { xUrl, tkUrl } from "./data.js";
-import { ClipRow, Spinner } from "./components.jsx";
+import { xUrl, tkUrl, KYURUSHITE, shortNick } from "./data.js";
+import { ACCENTS } from "./theme.js";
+import { ClipRow, SkeletonRows, SectionHead, EmptyState, PlayAllButton } from "./components.jsx";
+import { Icon } from "./icons.jsx";
 import { useYouTubeFeed } from "./useFeed.js";
 import { useBookmarks } from "./storage.js";
 
@@ -11,55 +12,92 @@ import { useBookmarks } from "./storage.js";
 // メンバー最新クリップ（YouTube 実データ）
 // MyTab と MemberPage で共用。キャッシュキーをメンバー ID で共有する
 // =====================
-export function MemberFeed({ member, limit = 5 }) {
-  const { items, loading, error } = useYouTubeFeed(
+export function MemberFeed({ member, limit = 5, title }) {
+  const { items, loading, error, retry } = useYouTubeFeed(
     `member_${member.id}`,
     { userInput: '', filters: { member: member.name, period: 'all' } },
   );
   const { toggle, has } = useBookmarks();
+  const visible = items.slice(0, limit);
 
-  if (loading) return <Spinner label={`${member.name}のクリップを検索中…`} />;
-  if (error || items.length === 0) return (
-    <div style={{ background: D.surface, borderRadius: 12, padding: 16, textAlign: "center", color: D.textMuted, fontSize: 11, marginBottom: 18, lineHeight: 1.6 }}>
-      最新クリップを取得できませんでした。<br />検索タブから「{member.name}」で探してみてください。
+  return (
+    <>
+      <SectionHead eyebrow="LATEST CLIPS" title={title || `${member.name}の最新クリップ`}
+        action={!loading && !error && <PlayAllButton queue={visible} />} />
+      {loading ? (
+        <SkeletonRows count={3} />
+      ) : error || items.length === 0 ? (
+        <div className="card">
+          <EmptyState icon="📡" title="最新クリップを取得できませんでした"
+            actions={error && <button className="btn btn-ghost btn-sm" onClick={retry}><Icon name="refresh" size={14} />再試行</button>}>
+            さがすタブから「{member.name}」で探してみてください
+          </EmptyState>
+        </div>
+      ) : (
+        visible.map((v, i) => (
+          <ClipRow key={v.videoId} video={v} queue={visible} queueIndex={i} bookmarked={has(v.videoId)} onToggleBookmark={toggle} />
+        ))
+      )}
+    </>
+  );
+}
+
+// SNS で推しを直接探す導線
+export function MemberSnsLinks({ member }) {
+  return (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <a href={xUrl(`${member.name} (推しカメラ OR 撮可) filter:native_video`)} target="_blank" rel="noopener noreferrer"
+        className="btn btn-ghost btn-sm" style={{ flex: 1 }}>
+        𝕏 で{shortNick(member)}の撮可 <Icon name="external" size={13} />
+      </a>
+      <a href={tkUrl(`${member.name} 推しカメラ`)} target="_blank" rel="noopener noreferrer"
+        className="btn btn-ghost btn-sm" style={{ flex: 1 }}>
+        ♪ TikTokで探す <Icon name="external" size={13} />
+      </a>
     </div>
   );
-  const visible = items.slice(0, limit);
+}
+
+// メンバーのプロフィールカード
+export function MemberHero({ member, label, action }) {
+  const pal = ACCENTS[member.id] || ACCENTS.all;
   return (
-    <div style={{ marginBottom: 14 }}>
-      {visible.map((v, i) => (
-        <ClipRow key={v.videoId} video={v} queue={visible} queueIndex={i} bookmarked={has(v.videoId)} onToggleBookmark={toggle} />
-      ))}
-    </div>
+    <section style={{
+      position: "relative", borderRadius: 22, padding: "22px 18px 18px", marginBottom: 4,
+      background: `linear-gradient(140deg, ${pal.soft} 0%, #ffffff 70%)`,
+      border: `1.5px solid rgba(${member.colorRgb},0.4)`,
+      boxShadow: `0 8px 28px rgba(${member.colorRgb},0.18)`,
+    }}>
+      {action && <div style={{ position: "absolute", top: 14, right: 14 }}>{action}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
+        <div style={{
+          width: 72, height: 72, borderRadius: "50%", flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34,
+          background: "#fff", boxShadow: `0 4px 18px rgba(${member.colorRgb},0.35)`,
+          border: `3px solid rgba(${member.colorRgb},0.55)`,
+        }}>{member.emoji}</div>
+        <div style={{ minWidth: 0 }}>
+          {label && <div className="eyebrow" style={{ color: pal.deep }}>{label}</div>}
+          <div style={{ fontSize: 22, fontWeight: 800 }}>{member.name}</div>
+          <div style={{ fontSize: 11.5, color: pal.deep, fontWeight: 700, marginTop: 2 }}>{member.nickname}</div>
+          <div style={{ fontSize: 11.5, color: "var(--text-sub)", marginTop: 3 }}>「{member.catchphrase}」</div>
+        </div>
+      </div>
+      <MemberSnsLinks member={member} />
+    </section>
   );
 }
 
 // =====================
 // メンバーページ
 // =====================
-export function MemberPage({ artist, member, onBack }) {
+export function MemberPage({ member, onBack }) {
   return (
     <div>
-      <button onClick={onBack} style={{ background: D.surface, border: `1px solid ${D.border}`, borderRadius: 10, padding: "6px 14px", color: D.text, cursor: "pointer", fontSize: 12, fontWeight: 600, marginBottom: 16 }}>← 戻る</button>
-      <div style={{ background: `linear-gradient(135deg,${member.color}30,${member.color}08)`, border: `1px solid ${member.color}40`, borderRadius: 18, padding: "22px 20px", marginBottom: 18, textAlign: "center" }}>
-        <div style={{ fontSize: 60, marginBottom: 8 }}>{member.emoji}</div>
-        <div style={{ fontSize: 22, fontWeight: 900, color: D.text }}>{member.name}</div>
-        <div style={{ fontSize: 10, color: member.color, fontWeight: 600, marginTop: 3 }}>{member.nickname}</div>
-        <div style={{ fontSize: 10, color: D.textSub, fontStyle: "italic", marginTop: 4, lineHeight: 1.5 }}>「{member.catchphrase}」</div>
-        <div style={{ fontSize: 9, color: D.textMuted, marginTop: 4 }}>{artist.name}</div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
-          <a href={xUrl(`${member.name} (推しカメラ OR 撮可) filter:native_video`)} target="_blank" rel="noopener noreferrer"
-            style={{ background: "rgba(0,0,0,0.4)", border: `1px solid ${D.border}`, borderRadius: 10, padding: "8px 14px", color: D.text, fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
-            𝕏 で {member.name} の撮可 ↗
-          </a>
-          <a href={tkUrl(member.name + " 推しカメラ")} target="_blank" rel="noopener noreferrer"
-            style={{ background: "rgba(255,0,80,0.1)", border: "1px solid rgba(255,0,80,0.2)", borderRadius: 10, padding: "8px 14px", color: "#ff6080", fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
-            🎵 TikTokで ↗
-          </a>
-        </div>
-      </div>
-
-      <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>📡 {member.name}の最新クリップ</div>
+      <button onClick={onBack} className="btn btn-ghost btn-sm" style={{ marginBottom: 14 }}>
+        <Icon name="back" size={14} />戻る
+      </button>
+      <MemberHero member={member} label={KYURUSHITE.name} />
       <MemberFeed member={member} limit={10} />
     </div>
   );
