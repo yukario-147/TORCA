@@ -22,6 +22,8 @@ import {
 
 // ---------- ユーティリティ ----------
 
+const MSG_RATE_LIMITED = '短時間に検索が集中しています。少し時間をおいてから再度お試しください';
+
 function relevanceScore(video, q) {
   let score = 0;
   const title = (video.title || '').toLowerCase();
@@ -168,8 +170,8 @@ export default function SearchTab({ sharedUrl }) {
       if (reqIds.current.youtube !== id) return;
       setPlatState('youtube', {
         items: [], loading: false,
-        error: err.quota
-          ? '本日の YouTube 検索回数の上限に達しました。時間をおいて再度お試しください'
+        error: err.rateLimited ? MSG_RATE_LIMITED
+          : err.quota ? '本日の YouTube 検索の上限に達しました。明日また試すか、外部アプリで検索してください'
           : '検索に失敗しました。時間をおいて再度お試しください',
       });
     }
@@ -195,7 +197,8 @@ export default function SearchTab({ sharedUrl }) {
         setPlatState(p, { items: [], loading: false, notConfigured: true });
         return;
       }
-      if (!res.ok || !data) throw new Error(data?.message || 'failed');
+      if (res.status === 429) throw Object.assign(new Error('rate-limited'), { rateLimited: true });
+      if (!res.ok || !data) throw Object.assign(new Error(data?.message || 'failed'), { quota: !!data?.quota });
       const items = Array.isArray(data.items) ? data.items : [];
       writeSnsCache(cacheKey, items);
       setPlatState(p, { items, loading: false });
@@ -203,9 +206,10 @@ export default function SearchTab({ sharedUrl }) {
       if (reqIds.current[p] !== id) return;
       setPlatState(p, {
         items: [], loading: false,
-        error: /上限|quota/i.test(String(err.message || ''))
-          ? '検索回数の上限に達しました。時間をおいて試すか、外部アプリで検索してください'
-          : '検索に失敗しました。外部アプリでの検索もお試しください',
+        error: err.rateLimited ? MSG_RATE_LIMITED
+          : err.quota || /上限|quota/i.test(String(err.message || ''))
+            ? '本日のSNS検索の上限に達しました。明日また試すか、外部アプリで検索してください'
+            : '検索に失敗しました。外部アプリでの検索もお試しください',
       });
     }
   };

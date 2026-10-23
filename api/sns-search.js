@@ -12,6 +12,9 @@
 
 import { MEMBER_ALIASES, normalizeInput, sanitizeFilters } from '../src/searchDict.js';
 import { fetchOembed, clip } from './oembed.js';
+import { LIMITS, rateLimit, reserveBudget, markExhausted, cacheGet, cacheSet, hashKey, sendLimited } from './_guard.js';
+
+const FRESH_MS = 6 * 60 * 60 * 1000; // 同じ検索は6時間キャッシュ（検索 API の無料枠を節約）
 
 const PLATFORM_RULES = {
   x: {
@@ -217,17 +220,33 @@ export default async function handler(req, res) {
 
   const topic = buildTopic(input, safeFilters);
 
+  // ---- キャッシュ・回数制限・1日の上限（api/_guard.js、Upstash 接続時に有効） ----
+  const cacheKey = `sns:${hashKey({ v: 1, platform, topic })}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached?.fresh) return res.status(200).json(cached.data);
+  const fallback = (limited) => (cached ? res.status(200).json({ ...cached.data, stale: true }) : sendLimited(res, limited));
+
+  const rl = await rateLimit(req, 'sns');
+  if (!rl.ok) return fallback({ retryAfter: rl.retryAfter });
+  if (!(await reserveBudget('sns', 1, LIMITS.sns()))) {
+    return fallback({ quota: true, message: '本日のSNS検索の上限に達しました。明日また試すか、外部アプリで検索してください' });
+  }
+
   try {
     const raw = provider === 'tavily' ? await searchTavily(platform, topic)
       : provider === 'brave' ? await searchBrave(platform, topic)
       : await searchGoogleCse(platform, topic);
 
     const items = await enrichItems(platform, normalize(platform, raw));
-    return res.status(200).json({ items, provider, query: topic });
+    const body = { items, provider, query: topic };
+    if (items.length) await cacheSet(cacheKey, body, { freshMs: FRESH_MS });
+    return res.status(200).json(body);
   } catch (err) {
     console.error('sns-search error:', err);
     const msg = String(err.message || '');
     const quota = msg.includes('429') || /quota|limit/i.test(msg);
+    if (quota) await markExhausted('sns');
+    if (cached) return res.status(200).json({ ...cached.data, stale: true });
     return res.status(502).json({
       error: 'sns-search-failed',
       provider,

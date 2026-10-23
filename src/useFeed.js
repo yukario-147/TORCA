@@ -20,6 +20,7 @@ export async function fetchYouTubeSearch(body, { signal } = {}) {
   if (!res.ok || !data) {
     const err = new Error(data?.message || data?.error || `HTTP ${res.status}`);
     err.quota = !!data?.quota;
+    err.rateLimited = res.status === 429; // サーバーの回数制限・Vercel Firewall のどちらでも 429
     throw err;
   }
   return Array.isArray(data.items) ? data.items : [];
