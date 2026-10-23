@@ -10,24 +10,24 @@
 //   3. Google CSE … GOOGLE_CSE_CX + GOOGLE_CSE_KEY
 //                   （※新規プロジェクトへの提供終了。既存アクセス保有者のみ）
 
-import { MEMBER_ALIASES } from '../src/searchDict.js';
+import { MEMBER_ALIASES, normalizeInput, sanitizeFilters } from '../src/searchDict.js';
 import { fetchOembed, clip } from './oembed.js';
 
 const PLATFORM_RULES = {
   x: {
     site: 'x.com',
     hint: 'inurl:status',
-    postPattern: /(?:x|twitter)\.com\/[^/]+\/status(?:es)?\/\d+/,
+    postPattern: /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/[^/?#]+\/status(?:es)?\/\d+/,
   },
   tiktok: {
     site: 'tiktok.com',
     hint: 'inurl:video',
-    postPattern: /tiktok\.com\/@[^/]+\/video\/\d+/,
+    postPattern: /^https?:\/\/(?:www\.|m\.)?tiktok\.com\/@[^/?#]+\/video\/\d+/,
   },
   instagram: {
     site: 'instagram.com',
     hint: '(inurl:reel OR inurl:p)',
-    postPattern: /instagram\.com\/(?:[^/]+\/)?(?:p|reel|reels|tv)\/[\w-]+/,
+    postPattern: /^https?:\/\/(?:www\.)?instagram\.com\/(?:[^/?#]+\/)?(?:p|reel|reels|tv)\/[\w-]+/,
   },
 };
 
@@ -71,7 +71,8 @@ function normalize(platform, rawItems) {
   return rawItems
     .filter(item => rule.postPattern.test(item.url || ''))
     .map(item => {
-      const url = item.url.replace(/^http:/, 'https:').replace(/twitter\.com/, 'x.com');
+      let url = item.url.replace(/^http:/, 'https:');
+      if (platform === 'x') url = url.replace(/^https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com/, 'https://x.com');
       const title = cleanText((item.title || '').replace(/\s*[|｜-]\s*(X|TikTok|Instagram).*$/i, '')) || url;
       let snippet = clip(cleanText(item.snippet), 160);
       // タイトルと重複するスニペットは省く（読みやすさ優先）
@@ -199,8 +200,8 @@ export default async function handler(req, res) {
 
   const { platform, userInput = '', filters = {} } = req.body || {};
   if (!PLATFORM_RULES[platform]) return res.status(400).json({ error: 'unsupported platform' });
-  const input = typeof userInput === 'string' ? userInput.slice(0, 100) : '';
-  const safeFilters = filters && typeof filters === 'object' ? filters : {};
+  const input = normalizeInput(userInput);
+  const safeFilters = sanitizeFilters(filters);
 
   const provider = process.env.TAVILY_API_KEY ? 'tavily'
     : process.env.BRAVE_API_KEY ? 'brave'

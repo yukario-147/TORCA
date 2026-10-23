@@ -4,6 +4,7 @@
 // ・端末側でも localStorage に TTL 付きでキャッシュ
 
 import { useState, useEffect, useCallback } from 'react';
+import { normalizeInput } from './searchDict.js';
 
 const DEFAULT_TTL = 60 * 60 * 1000; // 1時間
 const CACHE_PREFIX = 'torca_feed_';
@@ -11,7 +12,9 @@ const ERROR_COOLDOWN = 30 * 1000; // 失敗直後に同じフィードを連打�
 
 // /api/youtube-search を呼ぶ共通関数（SearchTab からも使用）
 export async function fetchYouTubeSearch(body, { signal } = {}) {
-  const res = await fetch(`/api/youtube-search?p=${encodeURIComponent(JSON.stringify(body))}`, { signal });
+  // 入力の表記ゆれ（全角・余分な空白）を揃えて、CDN キャッシュに当たりやすくする
+  const params = 'userInput' in body ? { ...body, userInput: normalizeInput(body.userInput) } : body;
+  const res = await fetch(`/api/youtube-search?p=${encodeURIComponent(JSON.stringify(params))}`, { signal });
   let data = null;
   try { data = await res.json(); } catch { /* HTML エラーページ等 */ }
   if (!res.ok || !data) {

@@ -7,7 +7,7 @@
 //
 // パラメータ: { userInput, filters: { member, venue, period }, order, channelId }
 
-import { expandQueries, periodToPublishedAfter, OFFICIAL_CHANNEL_IDS } from '../src/searchDict.js';
+import { expandQueries, periodToPublishedAfter, normalizeInput, sanitizeFilters, OFFICIAL_CHANNEL_IDS } from '../src/searchDict.js';
 import { scoreVideos, geminiConfigured } from './_gemini.js';
 
 const CACHE_OK = 'public, s-maxage=1800, stale-while-revalidate=86400';
@@ -67,8 +67,8 @@ export default async function handler(req, res) {
 
   const params = readParams(req);
   if (!params) return sendError(res, 400, null, 'invalid parameters');
-  const userInput = typeof params.userInput === 'string' ? params.userInput.slice(0, 100) : '';
-  const filters = params.filters && typeof params.filters === 'object' ? params.filters : {};
+  const userInput = normalizeInput(params.userInput);
+  const filters = sanitizeFilters(params.filters);
   const order = params.order === 'date' ? 'date' : 'relevance';
   const channelId = typeof params.channelId === 'string' && /^UC[\w-]{22}$/.test(params.channelId) ? params.channelId : null;
   const cacheable = req.method === 'GET';

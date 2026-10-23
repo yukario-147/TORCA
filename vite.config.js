@@ -1,5 +1,12 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+
+// vercel.json の全ページ共通ヘッダー（CSP など）。npm run preview でも本番と同じ条件で確認できるようにする
+const vercelHeaders = Object.fromEntries(
+  (JSON.parse(readFileSync(new URL('./vercel.json', import.meta.url), 'utf8')).headers || [])
+    .find(h => h.source === '/(.*)')?.headers.map(h => [h.key, h.value]) || [],
+)
 
 // ローカル開発用：/api/* を api/ 配下の Vercel Functions で処理する（vercel dev なしで API を動かす）
 // .env.local の YOUTUBE_API_KEY / GEMINI_API_KEY / TAVILY_API_KEY を読み込む
@@ -17,6 +24,14 @@ function devApi() {
         const url = new URL(req.url, 'http://localhost')
         const name = url.pathname.replace(/^\/+|\/+$/g, '')
         if (!/^[a-z0-9-]+$/.test(name)) return next() // _gemini.js 等の内部モジュールは公開しない
+
+        // 開発中に開いた他サイトから、ローカルの API キーを使われないようにする
+        const site = req.headers['sec-fetch-site']
+        const origin = req.headers.origin
+        if (site === 'cross-site' || (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin))) {
+          res.statusCode = 403
+          return res.end('forbidden')
+        }
 
         let mod
         try {
@@ -50,4 +65,5 @@ function devApi() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), devApi()],
+  preview: { headers: vercelHeaders },
 })
