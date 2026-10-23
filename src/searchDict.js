@@ -51,6 +51,24 @@ export const VENUE_ALIASES = {
   '東京ドームシティホール': ['Kanadevia Hall'],
 };
 
+// API に渡す検索条件の正規化
+// 決まった値以外は無視する（不正な入力を防ぎ、CDN キャッシュのキーのばらつきも減らす）
+export const MEMBER_NAMES = ['島村嬉唄', '環やね', 'チバゆな', '逃げ水あむ'];
+
+export function normalizeInput(s) {
+  if (typeof s !== 'string') return '';
+  return Array.from(s.normalize('NFKC').replace(/\s+/g, ' ').trim()).slice(0, 100).join('');
+}
+
+export function sanitizeFilters(f) {
+  const src = f && typeof f === 'object' ? f : {};
+  return {
+    member: MEMBER_NAMES.includes(src.member) ? src.member : null,
+    venue: typeof src.venue === 'string' && Object.hasOwn(VENUE_ALIASES, src.venue) ? src.venue : null,
+    period: src.period === 'week' || src.period === 'month' ? src.period : 'all',
+  };
+}
+
 // ユーザー入力1つから最大5本の検索クエリを生成
 export function expandQueries(userInput, filters = {}) {
   const text = (userInput || '').trim();

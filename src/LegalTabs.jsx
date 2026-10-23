@@ -31,7 +31,8 @@ export function PrivacyTab() {
   return (
     <div>
       <LegalSection title="収集する情報" body="当サービスが端末に保存する情報は、お客様が設定した「推しメンバー」、ブックマーク、アーカイブ、検索履歴のみです。これらはお使いのデバイスのローカルストレージに保存され、当サービスのサーバーに蓄積されることはありません。" />
-      <LegalSection title="検索・AI機能について" body="検索キーワードやアーカイブしたURLは、検索結果の取得・AI解析のために当サービスのサーバーを経由して外部API（YouTube Data API・Google Gemini API・SNS検索API）へ送信されますが、当サービスのサーバー上には保存・記録されません。" />
+      <LegalSection title="検索・AI機能について" body="検索キーワードやアーカイブしたURLは、検索結果の取得・AI解析のために当サービスのサーバーを経由して外部API（YouTube Data API・Google Gemini API・SNS検索API）へ送信されます。検索結果は表示の高速化と利用枠の節約のため、最大3日間サーバー上に一時保存されますが、利用者を特定する情報とは結び付けません。" />
+      <LegalSection title="不正利用の防止" body="APIの過剰な利用を防ぐため、IPアドレスから生成した復元できない識別子と利用回数を、最大2日間サーバー上に一時保存します。IPアドレスそのものは保存しません。" />
       <LegalSection title="個人情報の送信" body="当サービスは氏名・メールアドレス等の個人情報をサーバーへ送信・保存しません。" />
       <LegalSection title="Cookieについて" body="当サービス自体はCookieを使用しません。ただし、埋め込み表示するYouTube・X・TikTok・Instagramは、各社のポリシーに基づきCookie等を使用する場合があります。" />
       <LegalSection title="外部サービス" body="YouTube・X（旧Twitter）・TikTok・Instagramの埋め込みとリンクを含みます。これらのサービスのプライバシーポリシーは各社のものに従います。" />

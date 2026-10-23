@@ -10,24 +10,27 @@
 //   3. Google CSE … GOOGLE_CSE_CX + GOOGLE_CSE_KEY
 //                   （※新規プロジェクトへの提供終了。既存アクセス保有者のみ）
 
-import { MEMBER_ALIASES } from '../src/searchDict.js';
+import { MEMBER_ALIASES, normalizeInput, sanitizeFilters } from '../src/searchDict.js';
 import { fetchOembed, clip } from './oembed.js';
+import { LIMITS, rateLimit, reserveBudget, markExhausted, cacheGet, cacheSet, hashKey, sendLimited } from './_guard.js';
+
+const FRESH_MS = 6 * 60 * 60 * 1000; // 同じ検索は6時間キャッシュ（検索 API の無料枠を節約）
 
 const PLATFORM_RULES = {
   x: {
     site: 'x.com',
     hint: 'inurl:status',
-    postPattern: /(?:x|twitter)\.com\/[^/]+\/status(?:es)?\/\d+/,
+    postPattern: /^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/[^/?#]+\/status(?:es)?\/\d+/,
   },
   tiktok: {
     site: 'tiktok.com',
     hint: 'inurl:video',
-    postPattern: /tiktok\.com\/@[^/]+\/video\/\d+/,
+    postPattern: /^https?:\/\/(?:www\.|m\.)?tiktok\.com\/@[^/?#]+\/video\/\d+/,
   },
   instagram: {
     site: 'instagram.com',
     hint: '(inurl:reel OR inurl:p)',
-    postPattern: /instagram\.com\/(?:[^/]+\/)?(?:p|reel|reels|tv)\/[\w-]+/,
+    postPattern: /^https?:\/\/(?:www\.)?instagram\.com\/(?:[^/?#]+\/)?(?:p|reel|reels|tv)\/[\w-]+/,
   },
 };
 
@@ -71,7 +74,8 @@ function normalize(platform, rawItems) {
   return rawItems
     .filter(item => rule.postPattern.test(item.url || ''))
     .map(item => {
-      const url = item.url.replace(/^http:/, 'https:').replace(/twitter\.com/, 'x.com');
+      let url = item.url.replace(/^http:/, 'https:');
+      if (platform === 'x') url = url.replace(/^https:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com/, 'https://x.com');
       const title = cleanText((item.title || '').replace(/\s*[|｜-]\s*(X|TikTok|Instagram).*$/i, '')) || url;
       let snippet = clip(cleanText(item.snippet), 160);
       // タイトルと重複するスニペットは省く（読みやすさ優先）
@@ -199,8 +203,8 @@ export default async function handler(req, res) {
 
   const { platform, userInput = '', filters = {} } = req.body || {};
   if (!PLATFORM_RULES[platform]) return res.status(400).json({ error: 'unsupported platform' });
-  const input = typeof userInput === 'string' ? userInput.slice(0, 100) : '';
-  const safeFilters = filters && typeof filters === 'object' ? filters : {};
+  const input = normalizeInput(userInput);
+  const safeFilters = sanitizeFilters(filters);
 
   const provider = process.env.TAVILY_API_KEY ? 'tavily'
     : process.env.BRAVE_API_KEY ? 'brave'
@@ -216,17 +220,33 @@ export default async function handler(req, res) {
 
   const topic = buildTopic(input, safeFilters);
 
+  // ---- キャッシュ・回数制限・1日の上限（api/_guard.js、Upstash 接続時に有効） ----
+  const cacheKey = `sns:${hashKey({ v: 1, platform, topic })}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached?.fresh) return res.status(200).json(cached.data);
+  const fallback = (limited) => (cached ? res.status(200).json({ ...cached.data, stale: true }) : sendLimited(res, limited));
+
+  const rl = await rateLimit(req, 'sns');
+  if (!rl.ok) return fallback({ retryAfter: rl.retryAfter });
+  if (!(await reserveBudget('sns', 1, LIMITS.sns()))) {
+    return fallback({ quota: true, message: '本日のSNS検索の上限に達しました。明日また試すか、外部アプリで検索してください' });
+  }
+
   try {
     const raw = provider === 'tavily' ? await searchTavily(platform, topic)
       : provider === 'brave' ? await searchBrave(platform, topic)
       : await searchGoogleCse(platform, topic);
 
     const items = await enrichItems(platform, normalize(platform, raw));
-    return res.status(200).json({ items, provider, query: topic });
+    const body = { items, provider, query: topic };
+    if (items.length) await cacheSet(cacheKey, body, { freshMs: FRESH_MS });
+    return res.status(200).json(body);
   } catch (err) {
     console.error('sns-search error:', err);
     const msg = String(err.message || '');
     const quota = msg.includes('429') || /quota|limit/i.test(msg);
+    if (quota) await markExhausted('sns');
+    if (cached) return res.status(200).json({ ...cached.data, stale: true });
     return res.status(502).json({
       error: 'sns-search-failed',
       provider,

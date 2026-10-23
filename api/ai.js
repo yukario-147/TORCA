@@ -4,6 +4,7 @@
 // プロンプトはサーバー側で固定（任意のプロンプトを中継する汎用プロキシにしない）。
 
 import { generateJson, geminiConfigured } from './_gemini.js';
+import { LIMITS, rateLimit, reserveBudget, sendLimited } from './_guard.js';
 
 const MEMBERS = ['島村嬉唄', '環やね', 'チバゆな', '逃げ水あむ'];
 
@@ -25,6 +26,13 @@ export default async function handler(req, res) {
   if (!url || !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'url is required' });
   const title = str(body.title, 300);
   const authorName = str(body.authorName, 100);
+
+  // 回数制限・1日の上限（api/_guard.js、Upstash 接続時に有効）
+  const rl = await rateLimit(req, 'ai');
+  if (!rl.ok) return sendLimited(res, { retryAfter: rl.retryAfter });
+  if (!(await reserveBudget('gemini', 1, LIMITS.gemini()))) {
+    return sendLimited(res, { quota: true, message: '本日のAI判定の上限に達しました' });
+  }
 
   const out = await generateJson({
     system: SYSTEM,
