@@ -13,9 +13,11 @@ import { useBookmarks } from "./storage.js";
 // MyTab と MemberPage で共用。キャッシュキーをメンバー ID で共有する
 // =====================
 export function MemberFeed({ member, limit = 5, title }) {
+  // 「最新クリップ」なので新しい順で取得する。
+  // 関連度順はクエリによって 0 件になることがあった（チバゆなで発生）
   const { items, loading, error, retry } = useYouTubeFeed(
-    `member_${member.id}`,
-    { userInput: '', filters: { member: member.name, period: 'all' } },
+    `member_${member.id}_date`,
+    { userInput: '', filters: { member: member.name, period: 'all' }, order: 'date' },
   );
   const { toggle, has } = useBookmarks();
   const visible = items.slice(0, limit);
